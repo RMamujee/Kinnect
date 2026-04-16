@@ -52,17 +52,30 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
   const containerRef = useRef<HTMLDivElement>(null);
 
   const {
-    persons, families, rootPersonId, selectedPersonId, setSelectedPerson,
+    persons, families, rootPersonId, selectedPersonId, setSelectedPerson, deletePerson,
   } = useGenealogyStore(s => ({
     persons: s.persons,
     families: s.families,
     rootPersonId: s.rootPersonId,
     selectedPersonId: s.selectedPersonId,
     setSelectedPerson: s.setSelectedPerson,
+    deletePerson: s.deletePerson,
   }));
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // Intercept ReactFlow's built-in Delete-key removal so it goes through the store
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    const nonRemove = changes.filter(c => {
+      if (c.type === 'remove') {
+        deletePerson(c.id);
+        return false;
+      }
+      return true;
+    });
+    if (nonRemove.length > 0) onNodesChange(nonRemove);
+  }, [onNodesChange, deletePerson]);
 
   // Track structural changes: person keys + image presence + family membership
   const structureKey = useMemo(() => {
@@ -148,7 +161,7 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         fitView
         fitViewOptions={{ padding: 0.2 }}

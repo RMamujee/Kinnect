@@ -202,8 +202,27 @@ export const useGenealogyStore = create<GenealogyStore>()(
 
       deletePerson: (id) => {
         set(s => {
-          const { [id]: _, ...rest } = s.persons;
-          return { persons: rest };
+          const { [id]: _, ...restPersons } = s.persons;
+
+          const updatedFamilies: Record<string, Family> = {};
+          for (const [fid, fam] of Object.entries(s.families)) {
+            const s1 = fam.spouse1Id === id ? undefined : fam.spouse1Id;
+            const s2 = fam.spouse2Id === id ? undefined : fam.spouse2Id;
+            const children = fam.childIds.filter(cid => cid !== id);
+            if (s1 || s2 || children.length > 0) {
+              const changed = s1 !== fam.spouse1Id || s2 !== fam.spouse2Id || children.length !== fam.childIds.length;
+              updatedFamilies[fid] = changed
+                ? { ...fam, spouse1Id: s1, spouse2Id: s2, childIds: children, updatedAt: nowISO() }
+                : fam;
+            }
+            // family dropped if it referenced only this person
+          }
+
+          return {
+            persons: restPersons,
+            families: updatedFamilies,
+            selectedPersonId: s.selectedPersonId === id ? null : s.selectedPersonId,
+          };
         });
       },
 

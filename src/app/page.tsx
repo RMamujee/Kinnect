@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { TreePine, Search, Shield, Globe, ArrowRight, Users, FlaskConical } from 'lucide-react';
+import Image from 'next/image';
+import { Search, Shield, Globe, ArrowRight, Users, FlaskConical } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { useHydration } from '@/store/useHydration';
 import { LoadingScreen } from '@/components/UI/LoadingScreen';
@@ -26,11 +27,8 @@ export default function HomePage() {
     <main className="min-h-screen bg-gradient-to-br from-ancestry-cream via-white to-primary-50">
       {/* Hero */}
       <div className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-14 h-14 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <TreePine className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">Kinnect</h1>
+        <div className="flex items-center justify-center mb-6">
+          <Image src="/logo.png" alt="Kinnect" width={200} height={200} priority />
         </div>
 
         <h2 className="text-2xl md:text-3xl font-serif text-gray-800 mb-4 leading-tight">
