@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   MiniMap,
@@ -13,15 +13,43 @@ import ReactFlow, {
   type NodeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { ZoomIn, ZoomOut, Maximize2, LayoutGrid } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, LayoutGrid, Download, Loader2 } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { PersonNode } from './PersonNode';
 import { buildTreeLayout } from './treeLayout';
 
 const nodeTypes: NodeTypes = { personNode: PersonNode };
 
+async function exportToPDF(
+  containerEl: HTMLElement,
+  fitViewFn: (opts?: { padding?: number; duration?: number }) => void,
+  onDone: () => void,
+) {
+  fitViewFn({ padding: 0.12, duration: 300 });
+  await new Promise(r => setTimeout(r, 450));
+
+  const html2canvas = (await import('html2canvas')).default;
+  const { jsPDF } = await import('jspdf');
+
+  const canvas = await html2canvas(containerEl, {
+    scale: 1.5,
+    useCORS: true,
+    logging: false,
+    backgroundColor: '#f1f5f9',
+  });
+
+  const imgW = canvas.width;
+  const imgH = canvas.height;
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [imgW / 1.5, imgH / 1.5] });
+  pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, imgW / 1.5, imgH / 1.5);
+  pdf.save('kinnect-family-tree.pdf');
+  onDone();
+}
+
 function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: string) => void }) {
   const { fitView, zoomIn, zoomOut } = useReactFlow();
+  const [exporting, setExporting] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const {
     persons, families, rootPersonId, selectedPersonId, setSelectedPerson,
@@ -107,46 +135,63 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
     );
   }
 
+  function handleExportPDF() {
+    const el = containerRef.current;
+    if (!el || exporting) return;
+    setExporting(true);
+    exportToPDF(el, fitView, () => setExporting(false)).catch(() => setExporting(false));
+  }
+
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      fitView
-      fitViewOptions={{ padding: 0.2 }}
-      minZoom={0.1}
-      maxZoom={2}
-      nodesDraggable
-      attributionPosition="bottom-right"
-    >
-      <Background color="#e2e8f0" gap={20} size={1} />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={node => {
-          const gender = (node.data as { person: { gender: string } })?.person?.gender;
-          return gender === 'male' ? '#bfdbfe' : gender === 'female' ? '#fbcfe8' : '#e2e8f0';
-        }}
-        maskColor="rgba(255,255,255,0.7)"
-        className="!rounded-xl !border !border-gray-200"
-      />
-      <Panel position="bottom-left" className="flex flex-col gap-1 mb-4 ml-2">
-        <button onClick={() => zoomIn()} className="tree-control-btn" title="Zoom in">
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button onClick={() => zoomOut()} className="tree-control-btn" title="Zoom out">
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <button onClick={() => fitView({ padding: 0.2 })} className="tree-control-btn" title="Fit view">
-          <Maximize2 className="w-4 h-4" />
-        </button>
-        <button onClick={handleAutoOrganize} className="tree-control-btn" title="Auto-organize layout">
-          <LayoutGrid className="w-4 h-4" />
-        </button>
-      </Panel>
-    </ReactFlow>
+    <div ref={containerRef} className="w-full h-full">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        fitView
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.1}
+        maxZoom={2}
+        nodesDraggable
+        attributionPosition="bottom-right"
+      >
+        <Background color="#e2e8f0" gap={20} size={1} />
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={node => {
+            const gender = (node.data as { person: { gender: string } })?.person?.gender;
+            return gender === 'male' ? '#bfdbfe' : gender === 'female' ? '#fbcfe8' : '#e2e8f0';
+          }}
+          maskColor="rgba(255,255,255,0.7)"
+          className="!rounded-xl !border !border-gray-200"
+        />
+        <Panel position="bottom-left" className="flex flex-col gap-1 mb-4 ml-2">
+          <button onClick={() => zoomIn()} className="tree-control-btn" title="Zoom in">
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button onClick={() => zoomOut()} className="tree-control-btn" title="Zoom out">
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button onClick={() => fitView({ padding: 0.2 })} className="tree-control-btn" title="Fit view">
+            <Maximize2 className="w-4 h-4" />
+          </button>
+          <button onClick={handleAutoOrganize} className="tree-control-btn" title="Auto-organize layout">
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={exporting}
+            className="tree-control-btn"
+            title="Download tree as PDF"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          </button>
+        </Panel>
+      </ReactFlow>
+    </div>
   );
 }
 
