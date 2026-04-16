@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type {
-  Person, Family, Source, Citation, Fact, PersonName,
+  Person, Family, Source, Citation, Fact, PersonName, Comment,
   GenealogyState, OnboardingData, OnboardingPersonInput,
   Gender, ConfidenceLevel,
 } from '@/lib/types';
@@ -34,6 +34,11 @@ interface GenealogyStore extends GenealogyState {
   // Fact actions
   addFact: (personId: string, fact: Omit<Fact, 'id' | 'personId' | 'createdAt' | 'updatedAt'>) => Fact;
   updateFact: (personId: string, factId: string, data: Partial<Fact>) => void;
+
+  // Comment actions
+  addComment: (data: Omit<Comment, 'id' | 'createdAt' | 'updatedAt'>) => Comment;
+  editComment: (id: string, text: string) => void;
+  deleteComment: (id: string) => void;
 
   // Bulk import from external sources (auto-extend)
   importExternalPersons: (persons: Person[], families: Family[]) => { added: number; skipped: number };
@@ -151,6 +156,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
       families: {},
       sources: {},
       citations: {},
+      comments: {},
       rootPersonId: null,
       selectedPersonId: null,
       onboardingComplete: false,
@@ -164,6 +170,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
         families: {},
         sources: {},
         citations: {},
+        comments: {},
         rootPersonId: null,
         selectedPersonId: null,
         onboardingComplete: false,
@@ -333,6 +340,37 @@ export const useGenealogyStore = create<GenealogyStore>()(
               },
             },
           };
+        });
+      },
+
+      addComment: (data) => {
+        const id = generateId();
+        const now = nowISO();
+        const comment: Comment = { ...data, id, createdAt: now, updatedAt: now };
+        set(s => ({ comments: { ...s.comments, [id]: comment } }));
+        return comment;
+      },
+
+      editComment: (id, text) => {
+        set(s => {
+          if (!s.comments[id]) return s;
+          return {
+            comments: {
+              ...s.comments,
+              [id]: { ...s.comments[id], text, updatedAt: nowISO() },
+            },
+          };
+        });
+      },
+
+      deleteComment: (id) => {
+        set(s => {
+          const { [id]: _, ...rest } = s.comments;
+          // Also delete any replies to this comment
+          const withoutReplies = Object.fromEntries(
+            Object.entries(rest).filter(([, c]) => c.parentId !== id)
+          );
+          return { comments: withoutReplies };
         });
       },
 
@@ -518,6 +556,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
         families: state.families,
         sources: state.sources,
         citations: state.citations,
+        comments: state.comments,
         rootPersonId: state.rootPersonId,
         onboardingComplete: state.onboardingComplete,
         autoSearchCompleted: state.autoSearchCompleted,

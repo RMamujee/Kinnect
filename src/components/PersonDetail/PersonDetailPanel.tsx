@@ -7,8 +7,9 @@ import { useGenealogyStore } from '@/store/genealogyStore';
 import { getPreferredName, formatLifespan, formatPartialDate, confidenceColor, confidenceLabel, cn } from '@/lib/utils';
 import { GPSPanel } from '../GPS/GPSPanel';
 import { RecordSearch } from '../Records/RecordSearch';
+import { CommentsTab } from './CommentsTab';
 
-type Tab = 'details' | 'gps' | 'records';
+type Tab = 'details' | 'gps' | 'records' | 'comments';
 
 interface Props {
   personId: string;
@@ -18,12 +19,13 @@ interface Props {
 export function PersonDetailPanel({ personId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('details');
 
-  const { person, updatePerson, deletePerson, sources, citations } = useGenealogyStore(s => ({
+  const { person, updatePerson, deletePerson, sources, citations, commentCount } = useGenealogyStore(s => ({
     person: s.persons[personId],
     updatePerson: s.updatePerson,
     deletePerson: s.deletePerson,
     sources: s.sources,
     citations: s.citations,
+    commentCount: Object.values(s.comments).filter(c => c.personId === personId).length,
   }));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,18 +75,18 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow block"
+              className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white shadow-md block"
               title="Upload photo"
             >
               {person.profileImageUrl ? (
                 <img src={person.profileImageUrl} alt={name} className="w-full h-full object-cover" />
               ) : (
                 <div className={cn('w-full h-full flex items-center justify-center', avatarBg)}>
-                  <User2 className="w-6 h-6 text-gray-500" />
+                  <User2 className="w-8 h-8 text-gray-500" />
                 </div>
               )}
-              <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                <Camera className="w-4 h-4 text-white" />
+              <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <Camera className="w-5 h-5 text-white" />
               </div>
             </button>
             {person.profileImageUrl && (
@@ -116,21 +118,30 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-white">
-        {(['details', 'gps', 'records'] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn(
-              'flex-1 py-2.5 text-xs font-semibold capitalize transition-colors',
-              tab === t
-                ? 'border-b-2 border-primary-600 text-primary-700'
-                : 'text-gray-500 hover:text-gray-700'
-            )}
-          >
-            {t === 'gps' ? 'GPS Proof' : t}
-          </button>
-        ))}
+      <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
+        {(['details', 'records', 'comments', 'gps'] as Tab[]).map(t => {
+          const label = t === 'gps' ? 'GPS' : t === 'comments' ? 'Notes' : t;
+          const count = t === 'comments' ? commentCount : 0;
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                'flex-1 min-w-0 py-2.5 text-xs font-semibold capitalize whitespace-nowrap transition-colors px-1',
+                tab === t
+                  ? 'border-b-2 border-primary-600 text-primary-700'
+                  : 'text-gray-500 hover:text-gray-700'
+              )}
+            >
+              {label}
+              {t === 'comments' && count > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">
+                  {count > 9 ? '9+' : count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
@@ -148,6 +159,9 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
         )}
         {tab === 'records' && (
           <RecordSearch person={person} />
+        )}
+        {tab === 'comments' && (
+          <CommentsTab personId={personId} />
         )}
       </div>
 
