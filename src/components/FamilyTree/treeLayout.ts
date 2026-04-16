@@ -90,7 +90,7 @@ export function buildTreeLayout(
     });
   });
 
-  // Build nodes
+  // Build nodes for connected persons
   generationMap.forEach((gen, personId) => {
     const person = persons[personId];
     if (!person) return;
@@ -109,6 +109,35 @@ export function buildTreeLayout(
       },
     });
   });
+
+  // Place any persons not reachable from root via family links in a floating row below the tree
+  const disconnectedIds = Object.keys(persons).filter(id => !generationMap.has(id));
+  if (disconnectedIds.length > 0) {
+    let maxY = 0;
+    personPositions.forEach(pos => { maxY = Math.max(maxY, pos.y); });
+    const floatY = maxY + NODE_HEIGHT + V_GAP * 3;
+    const totalW = disconnectedIds.length * (NODE_WIDTH + H_GAP) - H_GAP;
+    const startX = -totalW / 2;
+
+    disconnectedIds.forEach((pid, i) => {
+      const person = persons[pid];
+      if (!person) return;
+      const pos = { x: startX + i * (NODE_WIDTH + H_GAP), y: floatY };
+      personPositions.set(pid, pos);
+      nodes.push({
+        id: pid,
+        type: 'personNode',
+        position: pos,
+        data: {
+          person,
+          isRoot: false,
+          isSelected: pid === selectedPersonId,
+          onSelect,
+          onSearchRecords,
+        },
+      });
+    });
+  }
 
   // Build edges from families
   Object.values(families).forEach(family => {
