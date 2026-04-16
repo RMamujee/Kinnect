@@ -64,6 +64,7 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const prevNodeCountRef = useRef(0);
 
   // Intercept ReactFlow's built-in Delete-key removal so it goes through the store
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
@@ -97,6 +98,7 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
     if (!rootPersonId || Object.keys(persons).length === 0) {
       setNodes([]);
       setEdges([]);
+      prevNodeCountRef.current = 0;
       return;
     }
 
@@ -104,6 +106,9 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
       rootPersonId, persons, families,
       selectedPersonId, setSelectedPerson, onSearchRecords,
     );
+
+    const hadNewNodes = newNodes.length > prevNodeCountRef.current;
+    prevNodeCountRef.current = newNodes.length;
 
     // Preserve any positions the user has set by dragging
     setNodes(prev => {
@@ -115,6 +120,11 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
     });
 
     setEdges(newEdges);
+
+    // Fit view when new nodes appear (e.g. a standalone person added with no connection)
+    if (hadNewNodes) {
+      setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 80);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootPersonId, structureKey]);   // intentionally omit selectedPersonId – see next effect
 
