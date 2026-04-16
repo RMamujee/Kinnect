@@ -30,6 +30,10 @@ interface GenealogyStore extends GenealogyState {
   addFact: (personId: string, fact: Omit<Fact, 'id' | 'personId' | 'createdAt' | 'updatedAt'>) => Fact;
   updateFact: (personId: string, factId: string, data: Partial<Fact>) => void;
 
+  // Bulk import from external sources (auto-extend)
+  importExternalPersons: (persons: Person[], families: Family[]) => { added: number; skipped: number };
+  getExistingWikiTreeIds: () => string[];
+
   // Onboarding
   completeOnboarding: (data: OnboardingData) => void;
   setOnboardingComplete: (val: boolean) => void;
@@ -353,6 +357,70 @@ export const useGenealogyStore = create<GenealogyStore>()(
         }
 
         set({ onboardingComplete: true });
+      },
+
+      importExternalPersons: (newPersons, newFamilies) => {
+        const existing = get().persons;
+        const existingWTIds = new Set(
+          Object.values(existing).map(p => p.wikiTreeId).filter(Boolean) as string[]
+        );
+
+        let added = 0;
+        let skipped = 0;
+
+        const personUpdates: Record<string, Person> = {};
+        const idRemap: Record<string, string> = {}; // incoming id → final id (in case of dedup)
+
+        for (const person of newPersons) {
+          if (person.wikiTreeId && existingWTIds.has(person.wikiTreeId)) {
+            // Find existing person with this wikiTreeId and remap
+            const existing_person = Object.values(existing).find(p => p.wikiTreeId === person.wikiTreeId);
+            if (existing_person) idRemap[person.id] = existing_person.id;
+            skipped++;
+          } else {
+            personUpdates[person.id] = person;
+            if (person.wikiTreeId) existingWTIds.add(person.wikiTreeId);
+            idRemap[person.id] = person.id;
+            added++;
+          }
+        }
+
+        const familyUpdates: Record<string, Family> = {};
+        const existingFamilies = get().families;
+
+        for (const family of newFamilies) {
+          // Remap person IDs in family to final IDs
+          const s1 = family.spouse1Id ? (idRemap[family.spouse1Id] ?? family.spouse1Id) : undefined;
+          const s2 = family.spouse2Id ? (idRemap[family.spouse2Id] ?? family.spouse2Id) : undefined;
+          const children = family.childIds.map(cid => idRemap[cid] ?? cid);
+
+          // Check if a family with same spouses already exists
+          const existingFam = Object.values(existingFamilies).find(
+            ef => ef.spouse1Id === s1 && ef.spouse2Id === s2 ||
+                  ef.spouse1Id === s2 && ef.spouse2Id === s1
+          );
+
+          if (existingFam) {
+            // Merge children in
+            const mergedChildren = Array.from(new Set([...existingFam.childIds, ...children]));
+            familyUpdates[existingFam.id] = { ...existingFam, childIds: mergedChildren, updatedAt: nowISO() };
+          } else if (s1 || s2) {
+            familyUpdates[family.id] = { ...family, spouse1Id: s1, spouse2Id: s2, childIds: children };
+          }
+        }
+
+        set(state => ({
+          persons: { ...state.persons, ...personUpdates },
+          families: { ...state.families, ...familyUpdates },
+        }));
+
+        return { added, skipped };
+      },
+
+      getExistingWikiTreeIds: () => {
+        return Object.values(get().persons)
+          .map(p => p.wikiTreeId)
+          .filter(Boolean) as string[];
       },
 
       setOnboardingComplete: (val) => set({ onboardingComplete: val }),

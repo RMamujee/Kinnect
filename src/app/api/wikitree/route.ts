@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   if (action === 'ancestors') {
     const ancestors = await getWikiTreeAncestors(key, depth ?? 5);
-    return NextResponse.json({ ancestors, total: ancestors.length });
+    return NextResponse.json({ ancestors, total: Object.keys(ancestors).length });
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

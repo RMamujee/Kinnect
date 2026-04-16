@@ -6,6 +6,7 @@ import { TreePine, Users, Plus, Download, Upload, Menu, X } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { FamilyTreeView } from '@/components/FamilyTree/FamilyTreeView';
 import { PersonDetailPanel } from '@/components/PersonDetail/PersonDetailPanel';
+import { AutoBuildBanner } from '@/components/FamilyTree/AutoBuildBanner';
 import { cn, getPreferredName, formatLifespan } from '@/lib/utils';
 
 export default function TreePage() {
@@ -121,6 +122,7 @@ export default function TreePage() {
         {/* Tree canvas */}
         <div className="flex-1 relative overflow-hidden">
           <FamilyTreeView onSearchRecords={handleSearchRecords} />
+          <AutoBuildBanner />
         </div>
 
         {/* Right panel — person detail */}
