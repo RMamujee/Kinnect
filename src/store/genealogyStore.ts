@@ -9,6 +9,35 @@ import type {
 import { nowISO, generateId } from '@/lib/utils';
 import { checkGPSGate } from '@/lib/gps';
 
+function syncPersonCaches(person: Person): {
+  birthYear?: number;
+  birthPlace?: string;
+  deathYear?: number;
+  deathPlace?: string;
+} {
+  const preferred = (type: 'birth' | 'death') =>
+    person.facts.find(f => f.type === type && f.isPreferred) ??
+    person.facts.find(f => f.type === type);
+
+  const placeText = (f: Fact | undefined): string | undefined => {
+    if (!f?.place) return undefined;
+    return (
+      f.place.fullText ??
+      [f.place.city, f.place.state, f.place.country].filter(Boolean).join(', ') ||
+      undefined
+    );
+  };
+
+  const b = preferred('birth');
+  const d = preferred('death');
+  return {
+    birthYear: b?.date?.year,
+    birthPlace: placeText(b),
+    deathYear: d?.date?.year,
+    deathPlace: placeText(d),
+  };
+}
+
 interface GenealogyStore extends GenealogyState {
   // Hydration
   _hasHydrated: boolean;
@@ -35,6 +64,7 @@ interface GenealogyStore extends GenealogyState {
   // Fact actions
   addFact: (personId: string, fact: Omit<Fact, 'id' | 'personId' | 'createdAt' | 'updatedAt'>) => Fact;
   updateFact: (personId: string, factId: string, data: Partial<Fact>) => void;
+  deleteFact: (personId: string, factId: string) => void;
 
   // Comment actions
   addComment: (data: Omit<Comment, 'id' | 'createdAt' | 'updatedAt'>) => Comment;
@@ -306,23 +336,13 @@ export const useGenealogyStore = create<GenealogyStore>()(
       addFact: (personId, factData) => {
         const id = generateId();
         const now = nowISO();
-        const fact: Fact = {
-          ...factData,
-          id,
-          personId,
-          createdAt: now,
-          updatedAt: now,
-        };
-        set(s => ({
-          persons: {
-            ...s.persons,
-            [personId]: {
-              ...s.persons[personId],
-              facts: [...(s.persons[personId]?.facts ?? []), fact],
-              updatedAt: now,
-            },
-          },
-        }));
+        const fact: Fact = { ...factData, id, personId, createdAt: now, updatedAt: now };
+        set(s => {
+          const person = s.persons[personId];
+          if (!person) return s;
+          const updated = { ...person, facts: [...person.facts, fact], updatedAt: now };
+          return { persons: { ...s.persons, [personId]: { ...updated, ...syncPersonCaches(updated) } } };
+        });
         return fact;
       },
 
@@ -330,17 +350,24 @@ export const useGenealogyStore = create<GenealogyStore>()(
         set(s => {
           const person = s.persons[personId];
           if (!person) return s;
-          return {
-            persons: {
-              ...s.persons,
-              [personId]: {
-                ...person,
-                facts: person.facts.map(f =>
-                  f.id === factId ? { ...f, ...data, updatedAt: nowISO() } : f
-                ),
-              },
-            },
+          const updated = {
+            ...person,
+            facts: person.facts.map(f => f.id === factId ? { ...f, ...data, updatedAt: nowISO() } : f),
           };
+          return { persons: { ...s.persons, [personId]: { ...updated, ...syncPersonCaches(updated) } } };
+        });
+      },
+
+      deleteFact: (personId, factId) => {
+        set(s => {
+          const person = s.persons[personId];
+          if (!person) return s;
+          const updated = {
+            ...person,
+            facts: person.facts.filter(f => f.id !== factId),
+            updatedAt: nowISO(),
+          };
+          return { persons: { ...s.persons, [personId]: { ...updated, ...syncPersonCaches(updated) } } };
         });
       },
 
