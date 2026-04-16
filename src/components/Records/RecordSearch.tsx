@@ -227,7 +227,7 @@ export function RecordSearch({ person }: Props) {
           {loading ? 'Searching…' : 'Search Public Records'}
         </button>
         <p className="text-xs text-gray-400 mt-1.5 text-center">
-          Searches WikiTree &amp; FamilySearch simultaneously
+          Searches WikiTree public profiles
         </p>
       </div>
 

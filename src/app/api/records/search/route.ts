@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
 
   const { sources: sourcesParam, ...queryFields } = parsed.data;
   const query: RecordSearchQuery = queryFields;
-  const requestedSources = sourcesParam?.split(',') ?? ['familysearch', 'wikitree'];
+  // FamilySearch requires OAuth — default to WikiTree only until user authenticates
+  const requestedSources = sourcesParam?.split(',') ?? ['wikitree'];
 
   // Require at least a name to search
   if (!query.givenName && !query.surname) {

@@ -414,8 +414,8 @@ export const useGenealogyStore = create<GenealogyStore>()(
 
           // Check if a family with same spouses already exists
           const existingFam = Object.values(existingFamilies).find(
-            ef => ef.spouse1Id === s1 && ef.spouse2Id === s2 ||
-                  ef.spouse1Id === s2 && ef.spouse2Id === s1
+            ef => (ef.spouse1Id === s1 && ef.spouse2Id === s2) ||
+                  (ef.spouse1Id === s2 && ef.spouse2Id === s1)
           );
 
           if (existingFam) {
@@ -458,8 +458,8 @@ export const useGenealogyStore = create<GenealogyStore>()(
         const persons = get().persons;
         const p1 = family.spouse1Id ? persons[family.spouse1Id] : undefined;
         const p2 = family.spouse2Id ? persons[family.spouse2Id] : undefined;
-        const father = p1?.gender === 'male' ? p1 : p2?.gender === 'male' ? p2 : p1;
-        const mother = p1?.gender === 'female' ? p1 : p2?.gender === 'female' ? p2 : p2;
+        const father = p1?.gender === 'male' ? p1 : p2?.gender === 'male' ? p2 : undefined;
+        const mother = p1?.gender === 'female' ? p1 : p2?.gender === 'female' ? p2 : undefined;
         return { father, mother };
       },
 
