@@ -237,4 +237,5 @@ export function seedDemoData() {
 
   store.setRootPerson(root.id);
   store.setOnboardingComplete(true);
+  store.setAutoSearchCompleted(true); // demo data is pre-built, skip auto-search
 }

@@ -273,6 +273,7 @@ export interface GenealogyState {
   rootPersonId: string | null;
   selectedPersonId: string | null;
   onboardingComplete: boolean;
+  autoSearchCompleted: boolean;
 }
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ interface GenealogyStore extends GenealogyState {
   // Onboarding
   completeOnboarding: (data: OnboardingData) => void;
   setOnboardingComplete: (val: boolean) => void;
+  setAutoSearchCompleted: (val: boolean) => void;
 
   // Helpers
   getPersonById: (id: string) => Person | undefined;
@@ -153,6 +154,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
       rootPersonId: null,
       selectedPersonId: null,
       onboardingComplete: false,
+      autoSearchCompleted: false,
       _hasHydrated: false,
 
       setHasHydrated: (val) => set({ _hasHydrated: val }),
@@ -165,6 +167,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
         rootPersonId: null,
         selectedPersonId: null,
         onboardingComplete: false,
+        autoSearchCompleted: false,
       }),
 
       addPerson: (data) => {
@@ -442,6 +445,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
       },
 
       setOnboardingComplete: (val) => set({ onboardingComplete: val }),
+      setAutoSearchCompleted: (val) => set({ autoSearchCompleted: val }),
 
       getPersonById: (id) => get().persons[id],
 
@@ -497,6 +501,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
         citations: state.citations,
         rootPersonId: state.rootPersonId,
         onboardingComplete: state.onboardingComplete,
+        autoSearchCompleted: state.autoSearchCompleted,
       }),
     }
   )
