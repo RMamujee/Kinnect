@@ -2,10 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { TreePine, Search, Shield, Globe, ArrowRight, Users } from 'lucide-react';
+import { TreePine, Search, Shield, Globe, ArrowRight, Users, FlaskConical } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { useHydration } from '@/store/useHydration';
 import { LoadingScreen } from '@/components/UI/LoadingScreen';
+import { seedDemoData } from '@/lib/seedData';
 
 export default function HomePage() {
   const router = useRouter();
@@ -42,13 +43,22 @@ export default function HomePage() {
           public records and expand your tree following the Genealogical Proof Standard.
         </p>
 
-        <button
-          onClick={() => router.push('/onboarding')}
-          className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-base font-semibold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all"
-        >
-          Start Building My Tree
-          <ArrowRight className="w-5 h-5" />
-        </button>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            onClick={() => router.push('/onboarding')}
+            className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-base font-semibold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all"
+          >
+            Start Building My Tree
+            <ArrowRight className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => { seedDemoData(); router.push('/tree'); }}
+            className="inline-flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 text-base font-semibold px-8 py-3.5 rounded-2xl shadow-md hover:shadow-lg border border-gray-200 transition-all"
+          >
+            <FlaskConical className="w-5 h-5 text-primary-600" />
+            Try Demo
+          </button>
+        </div>
       </div>
 
       {/* Features */}
