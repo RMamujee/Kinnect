@@ -7,6 +7,7 @@ import type {
   Gender, ConfidenceLevel,
 } from '@/lib/types';
 import { nowISO, generateId } from '@/lib/utils';
+import { checkGPSGate } from '@/lib/gps';
 
 interface GenealogyStore extends GenealogyState {
   // Hydration
@@ -456,6 +457,12 @@ export const useGenealogyStore = create<GenealogyStore>()(
             if (existing_person) idRemap[person.id] = existing_person.id;
             skipped++;
           } else {
+            // Apply GPS evidence gate before adding
+            const gate = checkGPSGate(person);
+            if (!gate.approved) {
+              skipped++;
+              continue;
+            }
             personUpdates[person.id] = person;
             if (person.wikiTreeId) existingWTIds.add(person.wikiTreeId);
             idRemap[person.id] = person.id;

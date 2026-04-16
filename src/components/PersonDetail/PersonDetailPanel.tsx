@@ -5,11 +5,10 @@ import { X, Edit3, ExternalLink, Calendar, MapPin, User2, Camera, Trash2 } from 
 import type { Person } from '@/lib/types';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { getPreferredName, formatLifespan, formatPartialDate, confidenceColor, confidenceLabel, cn } from '@/lib/utils';
-import { GPSPanel } from '../GPS/GPSPanel';
 import { RecordSearch } from '../Records/RecordSearch';
 import { CommentsTab } from './CommentsTab';
 
-type Tab = 'details' | 'gps' | 'records' | 'comments';
+type Tab = 'details' | 'records' | 'comments';
 
 interface Props {
   personId: string;
@@ -119,8 +118,8 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
-        {(['details', 'records', 'comments', 'gps'] as Tab[]).map(t => {
-          const label = t === 'gps' ? 'GPS' : t === 'comments' ? 'Notes' : t;
+        {(['details', 'records', 'comments'] as Tab[]).map(t => {
+          const label = t === 'comments' ? 'Notes' : t;
           const count = t === 'comments' ? commentCount : 0;
           return (
             <button
@@ -148,14 +147,6 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
       <div className="flex-1 overflow-y-auto p-4">
         {tab === 'details' && (
           <DetailsTab person={person} citations={personCitations} sources={sources} />
-        )}
-        {tab === 'gps' && (
-          <GPSPanel
-            status={person.gpsStatus}
-            onUpdate={(updates) => updatePerson(personId, {
-              gpsStatus: { ...person.gpsStatus, ...updates }
-            })}
-          />
         )}
         {tab === 'records' && (
           <RecordSearch person={person} />
