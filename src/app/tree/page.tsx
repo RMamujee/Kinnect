@@ -10,6 +10,7 @@ import { RotateCcw } from 'lucide-react';
 import { FamilyTreeView } from '@/components/FamilyTree/FamilyTreeView';
 import { PersonDetailPanel } from '@/components/PersonDetail/PersonDetailPanel';
 import { AutoBuildBanner } from '@/components/FamilyTree/AutoBuildBanner';
+import { AutoTreeBuilder } from '@/components/FamilyTree/AutoTreeBuilder';
 import { cn, getPreferredName, formatLifespan } from '@/lib/utils';
 import { seedDemoData } from '@/lib/seedData';
 
@@ -179,6 +180,9 @@ export default function TreePage() {
           />
         )}
       </div>
+
+      {/* Auto-build overlay — fires once after onboarding to search & build tree */}
+      <AutoTreeBuilder />
     </div>
   );
 }
