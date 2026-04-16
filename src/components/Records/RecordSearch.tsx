@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, AlertCircle, Newspaper, Globe, BookOpen,
   Archive, Users, Lightbulb, UserCircle2,
 } from 'lucide-react';
-import type { Person, RecordSearchResult } from '@/lib/types';
+import type { Person, RecordSearchResult, FactType, ConfidenceLevel } from '@/lib/types';
 import { getPreferredName, cn } from '@/lib/utils';
 import { useGenealogyStore } from '@/store/genealogyStore';
 
@@ -250,27 +250,93 @@ export function RecordSearch({ person }: Props) {
       accessDate:      new Date().toISOString().split('T')[0],
     });
 
-    const updates: Partial<Person> = {};
-    if (result.source === 'familysearch') updates.familySearchId = result.externalId;
-    if (result.source === 'wikitree')     updates.wikiTreeId     = result.externalId;
-    updatePerson(person.id, updates);
+    // Link external profile IDs
+    const personUpdates: Partial<Person> = {};
+    if (result.source === 'familysearch') personUpdates.familySearchId = result.externalId;
+    if (result.source === 'wikitree')     personUpdates.wikiTreeId     = result.externalId;
+    if (Object.keys(personUpdates).length) updatePerson(person.id, personUpdates);
 
-    if (result.birthYear && !person.birthYear) {
+    // Helper: add a fact + citation if the person doesn't already have one of that type
+    const existingTypes = new Set(person.facts.map(f => f.type));
+    const hasPreferred  = (type: FactType) => person.facts.some(f => f.type === type && f.isPreferred);
+    const detail = `Found in ${result.publicationName ?? result.source} record`;
+
+    function maybeAdd(
+      type: FactType,
+      year?: number,
+      place?: string,
+      confidence: ConfidenceLevel = 'probable',
+      value?: string,
+      force = false,
+    ) {
+      if (!force && existingTypes.has(type)) return;
       const fact = addFact(person.id, {
-        type:        'birth',
-        date:        { year: result.birthYear },
-        place:       result.birthPlace ? { fullText: result.birthPlace } : undefined,
-        confidence:  'probable',
+        type,
+        date:        year ? { year } : undefined,
+        place:       place ? { fullText: place } : undefined,
+        value,
+        confidence,
         citationIds: [],
-        isPreferred: true,
+        isPreferred: !hasPreferred(type),
       });
-      addCitation({
-        sourceId:   source.id,
-        personId:   person.id,
-        factId:     fact.id,
-        confidence: 'probable',
-        detail:     `Found in ${result.publicationName ?? result.source} record`,
-      });
+      addCitation({ sourceId: source.id, personId: person.id, factId: fact.id, confidence, detail });
+      existingTypes.add(type); // prevent double-add within same import
+    }
+
+    // Populate facts based on record type
+    switch (result.recordType) {
+      case 'birth_certificate':
+        maybeAdd('birth', result.birthYear, result.birthPlace, 'probable');
+        break;
+
+      case 'death_certificate':
+        maybeAdd('death', result.deathYear, result.deathPlace, 'probable');
+        if (result.birthYear) maybeAdd('birth', result.birthYear, result.birthPlace, 'possible');
+        break;
+
+      case 'marriage_certificate':
+        maybeAdd('marriage', undefined, result.birthPlace, 'probable');
+        break;
+
+      case 'census': {
+        // Census year from publication date (e.g. "1880-06-01" → 1880)
+        const censusYear = result.publicationDate
+          ? parseInt(result.publicationDate.slice(0, 4), 10) || undefined
+          : undefined;
+        // Residence at census time — allow multiple (force=true)
+        maybeAdd('residence', censusYear, result.birthPlace, 'probable', undefined, true);
+        if (result.birthYear) maybeAdd('birth', result.birthYear, result.birthPlace, 'possible');
+        break;
+      }
+
+      case 'immigration':
+        maybeAdd('immigration', undefined, result.birthPlace, 'probable');
+        if (result.birthYear) maybeAdd('birth', result.birthYear, result.birthPlace, 'possible');
+        break;
+
+      case 'naturalization':
+        maybeAdd('naturalization', undefined, result.birthPlace, 'probable');
+        break;
+
+      case 'military':
+        maybeAdd('military_service', undefined, result.birthPlace, 'probable');
+        break;
+
+      case 'church_record':
+        // Church records often record baptism; use birth year as proxy
+        maybeAdd('baptism', result.birthYear, result.birthPlace, 'probable');
+        break;
+
+      case 'will_probate':
+      case 'land_deed':
+        // Documentary records: add residence near the record date/place
+        maybeAdd('residence', undefined, result.birthPlace, 'possible', undefined, true);
+        break;
+
+      default:
+        // Fallback: add birth if none exists and year is known
+        if (result.birthYear) maybeAdd('birth', result.birthYear, result.birthPlace, 'possible');
+        if (result.deathYear) maybeAdd('death', result.deathYear, result.deathPlace, 'possible');
     }
 
     setImportedIds(prev => new Set([...prev, result.id]));
