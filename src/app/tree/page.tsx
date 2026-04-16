@@ -57,7 +57,7 @@ export default function TreePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ancestry-cream">
         <div className="text-center max-w-sm px-4">
-          <Image src="/logo.png" alt="Kinnect" width={120} height={120} className="mx-auto mb-4" />
+          <Image src="/logo.png" alt="Kinnect" width={120} height={120} className="mx-auto mb-4 rounded-3xl" />
           <h2 className="text-xl font-serif font-bold text-gray-900 mb-2">No family tree yet</h2>
           <p className="text-gray-500 text-sm mb-6">Start by entering your family or load demo data to explore the app.</p>
           <div className="flex flex-col gap-3">
@@ -90,7 +90,7 @@ export default function TreePage() {
       {/* Top nav */}
       <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 z-20 flex-shrink-0">
         <div className="flex items-center">
-          <Image src="/logo.png" alt="Kinnect" width={90} height={90} />
+          <Image src="/logo.png" alt="Kinnect" width={90} height={90} className="rounded-2xl" />
         </div>
 
         <div className="flex-1" />

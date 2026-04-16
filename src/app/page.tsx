@@ -28,7 +28,7 @@ export default function HomePage() {
       {/* Hero */}
       <div className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <div className="flex items-center justify-center mb-6">
-          <Image src="/logo.png" alt="Kinnect" width={200} height={200} priority />
+          <Image src="/logo.png" alt="Kinnect" width={200} height={200} priority className="rounded-3xl" />
         </div>
 
         <h2 className="text-2xl md:text-3xl font-serif text-gray-800 mb-4 leading-tight">
