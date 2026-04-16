@@ -2,9 +2,11 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   images: {
-    domains: ['api.familysearch.org', 'www.wikitree.com'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'api.familysearch.org' },
+      { protocol: 'https', hostname: 'www.wikitree.com' },
+    ],
   },
-  serverExternalPackages: [],
 };
 
 export default nextConfig;

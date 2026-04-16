@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { TreePine, Users, Plus, Menu, X } from 'lucide-react';
+import { TreePine, Users, Plus, Menu, X, FlaskConical } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { useHydration } from '@/store/useHydration';
 import { LoadingScreen } from '@/components/UI/LoadingScreen';
@@ -11,6 +11,7 @@ import { FamilyTreeView } from '@/components/FamilyTree/FamilyTreeView';
 import { PersonDetailPanel } from '@/components/PersonDetail/PersonDetailPanel';
 import { AutoBuildBanner } from '@/components/FamilyTree/AutoBuildBanner';
 import { cn, getPreferredName, formatLifespan } from '@/lib/utils';
+import { seedDemoData } from '@/lib/seedData';
 
 export default function TreePage() {
   const router = useRouter();
@@ -51,16 +52,28 @@ export default function TreePage() {
   if (!onboardingComplete) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ancestry-cream">
-        <div className="text-center">
+        <div className="text-center max-w-sm px-4">
           <TreePine className="w-12 h-12 text-primary-600 mx-auto mb-4" />
           <h2 className="text-xl font-serif font-bold text-gray-900 mb-2">No family tree yet</h2>
-          <p className="text-gray-500 text-sm mb-6">Complete the onboarding to build your tree.</p>
-          <button
-            onClick={() => router.push('/onboarding')}
-            className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm"
-          >
-            Get Started
-          </button>
+          <p className="text-gray-500 text-sm mb-6">Start by entering your family or load demo data to explore the app.</p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => router.push('/onboarding')}
+              className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm"
+            >
+              Get Started
+            </button>
+            <button
+              onClick={seedDemoData}
+              className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors"
+            >
+              <FlaskConical className="w-4 h-4 text-amber-500" />
+              Load Demo Family
+            </button>
+            <p className="text-xs text-gray-400">
+              Demo includes 3 generations + a pre-linked WikiTree profile for testing Auto-Build.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -90,6 +103,16 @@ export default function TreePage() {
         >
           <Plus className="w-3.5 h-3.5" />
           Add Person
+        </button>
+
+        <button
+          onClick={() => {
+            if (confirm('Load demo family? This replaces your current tree.')) seedDemoData();
+          }}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+          title="Load demo family data"
+        >
+          <FlaskConical className="w-4 h-4" />
         </button>
 
         <button
