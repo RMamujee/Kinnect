@@ -261,6 +261,18 @@ export interface RecordSearchResult {
   rawData?: Record<string, unknown>;
 }
 
+// ─── Comments ────────────────────────────────────────────────────────────────
+
+export interface Comment {
+  id: string;
+  personId: string;
+  text: string;
+  authorName?: string;
+  parentId?: string; // for threaded replies
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Tree Layout ──────────────────────────────────────────────────────────────
 
 export interface TreeNode {
@@ -284,6 +296,7 @@ export interface GenealogyState {
   families: Record<string, Family>;
   sources: Record<string, Source>;
   citations: Record<string, Citation>;
+  comments: Record<string, Comment>;
   rootPersonId: string | null;
   selectedPersonId: string | null;
   onboardingComplete: boolean;
