@@ -20,7 +20,7 @@ export function SelfStep({ value, onChange }: Props) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             First / Given Name <span className="text-red-500">*</span>
@@ -68,7 +68,7 @@ export function SelfStep({ value, onChange }: Props) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Birth Date</label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <input
               type="number"
@@ -108,7 +108,7 @@ export function SelfStep({ value, onChange }: Props) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Birth Place</label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <input
             type="text"
             value={value.birthCity ?? ''}
