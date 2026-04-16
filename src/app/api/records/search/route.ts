@@ -26,8 +26,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid query', details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const query: RecordSearchQuery = parsed.data;
-  const requestedSources = parsed.data.sources?.split(',') ?? ['familysearch', 'wikitree'];
+  const { sources: sourcesParam, ...queryFields } = parsed.data;
+  const query: RecordSearchQuery = queryFields;
+  const requestedSources = sourcesParam?.split(',') ?? ['familysearch', 'wikitree'];
 
   // Require at least a name to search
   if (!query.givenName && !query.surname) {

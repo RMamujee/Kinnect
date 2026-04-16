@@ -4,9 +4,7 @@ const nextConfig: NextConfig = {
   images: {
     domains: ['api.familysearch.org', 'www.wikitree.com'],
   },
-  experimental: {
-    serverComponentsExternalPackages: [],
-  },
+  serverExternalPackages: [],
 };
 
 export default nextConfig;

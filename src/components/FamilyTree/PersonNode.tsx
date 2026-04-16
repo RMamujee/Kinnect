@@ -5,7 +5,7 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { User, Search, AlertCircle, CheckCircle2, Shield } from 'lucide-react';
 import type { Person } from '@/lib/types';
 import { getPreferredName, formatLifespan, cn } from '@/lib/utils';
-import { gpsScore } from '@/lib/gps';
+import { gpsScore } from '@/lib/utils';
 
 export interface PersonNodeData {
   person: Person;

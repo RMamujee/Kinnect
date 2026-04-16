@@ -2,7 +2,8 @@
 
 import { CheckCircle2, Circle, AlertTriangle, Info } from 'lucide-react';
 import type { GPSStatus } from '@/lib/types';
-import { GPS_ELEMENTS, RECOMMENDED_SOURCES, gpsScore, gpsScoreLabel } from '@/lib/gps';
+import { GPS_ELEMENTS, RECOMMENDED_SOURCES } from '@/lib/gps';
+import { gpsScore, gpsScoreLabel } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 interface Props {

@@ -5,7 +5,7 @@ import type { OnboardingPersonInput, Gender } from '@/lib/types';
 interface Props {
   label: string;
   value?: OnboardingPersonInput;
-  defaultGender: 'male' | 'female';
+  defaultGender: Gender;
   onChange: (v?: OnboardingPersonInput) => void;
   showMaiden?: boolean;
 }
