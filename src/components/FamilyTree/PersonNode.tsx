@@ -89,9 +89,9 @@ function PersonNodeComponent({ data }: NodeProps<PersonNodeData>) {
           </button>
         </div>
 
-        {person.autoPopulated && (
+        {(person.autoPopulated || person.wikiTreeId) && (
           <div className="mt-1 text-xs text-center text-primary-600 font-medium bg-primary-50 rounded-md py-0.5">
-            Auto-found
+            {person.wikiTreeId ? `WT: ${person.wikiTreeId}` : 'Auto-found'}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 /**
- * WikiTree API client (no auth required for read-only operations)
+ * WikiTree API client (no auth required for public profiles)
  * Docs: https://www.wikitree.com/wiki/API_Documentation
  */
 
@@ -7,26 +7,27 @@ import type { RecordSearchQuery, RecordSearchResult } from './types';
 
 const BASE_URL = process.env.WIKITREE_BASE_URL ?? 'https://api.wikitree.com/api.php';
 
-interface WikiTreeProfile {
-  Id?: number;
+const FIELDS = 'Id,Name,FirstName,LastNameAtBirth,LastNameCurrent,BirthDate,DeathDate,BirthLocation,DeathLocation,Father,Mother,Gender,IsLiving,Privacy';
+
+export interface WikiTreeProfile {
+  Id: number;
   Name?: string;
   FirstName?: string;
   LastNameAtBirth?: string;
   LastNameCurrent?: string;
-  BirthDate?: string;
+  BirthDate?: string;   // "YYYY-MM-DD" or "0000-00-00"
   DeathDate?: string;
   BirthLocation?: string;
   DeathLocation?: string;
-  Father?: number;
+  Father?: number;      // numeric WT id, 0 = unknown
   Mother?: number;
-  Gender?: string;
-  PageId?: number;
+  Gender?: string;      // "Male" | "Female"
+  IsLiving?: number;
+  Privacy?: number;     // 60 = public
+  status?: string;      // "Ancestor/Descendant permission denied." etc.
 }
 
-interface WikiTreeSearchResponse {
-  status?: string;
-  matches?: WikiTreeProfile[];
-}
+// ─── Search ───────────────────────────────────────────────────────────────────
 
 export async function searchWikiTree(
   query: RecordSearchQuery,
@@ -40,7 +41,8 @@ export async function searchWikiTree(
     LastName: query.surname ?? '',
     BirthDate: query.birthYear ? String(query.birthYear) : '',
     BirthLocation: query.birthPlace ?? '',
-    fields: 'Id,Name,FirstName,LastNameAtBirth,BirthDate,DeathDate,BirthLocation,DeathLocation,Father,Mother,Gender',
+    fields: FIELDS,
+    limit: '20',
   });
 
   try {
@@ -50,50 +52,44 @@ export async function searchWikiTree(
     });
 
     if (!res.ok) return [];
-    const data: WikiTreeSearchResponse = await res.json();
-    return parseWikiTreeResults(data);
+
+    // WikiTree returns an ARRAY — [{ status, matches: [...] }]
+    const data = await res.json();
+    const payload = Array.isArray(data) ? data[0] : data;
+    const matches: WikiTreeProfile[] = payload?.matches ?? [];
+
+    return matches
+      .filter(p => p.Id > 0 && p.Name)
+      .map((p): RecordSearchResult => ({
+        id: String(p.Id),
+        source: 'wikitree',
+        externalId: p.Name!,
+        name: buildDisplayName(p),
+        birthYear: parseWikiTreeYear(p.BirthDate),
+        birthPlace: p.BirthLocation || undefined,
+        deathYear: parseWikiTreeYear(p.DeathDate),
+        deathPlace: p.DeathLocation || undefined,
+        recordType: 'other',
+        confidence: scoreMatch(p, query),
+        url: `https://www.wikitree.com/wiki/${p.Name}`,
+        rawData: p as unknown as Record<string, unknown>,
+      }));
   } catch (err) {
-    console.error('WikiTree fetch error:', err);
+    console.error('WikiTree search error:', err);
     return [];
   }
 }
 
-function parseWikiTreeResults(data: WikiTreeSearchResponse): RecordSearchResult[] {
-  if (!data.matches) return [];
-
-  return data.matches.map((profile): RecordSearchResult => {
-    const name = [profile.FirstName, profile.LastNameAtBirth].filter(Boolean).join(' ') || profile.Name || 'Unknown';
-    return {
-      id: String(profile.Id ?? Math.random()),
-      source: 'wikitree',
-      externalId: profile.Name ?? String(profile.Id ?? ''),
-      name,
-      birthYear: parseWikiTreeYear(profile.BirthDate),
-      birthPlace: profile.BirthLocation,
-      deathYear: parseWikiTreeYear(profile.DeathDate),
-      deathPlace: profile.DeathLocation,
-      recordType: 'other',
-      confidence: 70,
-      url: profile.Name ? `https://www.wikitree.com/wiki/${profile.Name}` : undefined,
-      rawData: profile as Record<string, unknown>,
-    };
-  });
-}
-
-function parseWikiTreeYear(dateStr?: string): number | undefined {
-  if (!dateStr) return undefined;
-  const match = dateStr.match(/\d{4}/);
-  return match ? parseInt(match[0], 10) : undefined;
-}
+// ─── Fetch a single profile ───────────────────────────────────────────────────
 
 export async function getWikiTreeProfile(
   wikiTreeId: string,
 ): Promise<WikiTreeProfile | null> {
   const params = new URLSearchParams({
-    action: 'getProfile',
+    action: 'getPeople',
     format: 'json',
-    key: wikiTreeId,
-    fields: '*',
+    keys: wikiTreeId,
+    fields: FIELDS,
   });
 
   try {
@@ -102,22 +98,29 @@ export async function getWikiTreeProfile(
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.profile ?? null;
+    const payload = Array.isArray(data) ? data[0] : data;
+    const people = payload?.people ?? {};
+    const profiles = Object.values(people) as WikiTreeProfile[];
+    return profiles.find(p => p.Id > 0) ?? null;
   } catch {
     return null;
   }
 }
 
+// ─── Fetch ancestors (multi-generation) ──────────────────────────────────────
+// Uses `action=getPeople&ancestors=N` — the current recommended endpoint.
+// Returns a flat map of numeric-id → profile for ALL accessible ancestors.
+
 export async function getWikiTreeAncestors(
   wikiTreeId: string,
   depth: number = 5,
-): Promise<WikiTreeProfile[]> {
+): Promise<Record<number, WikiTreeProfile>> {
   const params = new URLSearchParams({
-    action: 'getAncestors',
+    action: 'getPeople',
     format: 'json',
-    key: wikiTreeId,
-    depth: String(depth),
-    fields: 'Id,Name,FirstName,LastNameAtBirth,BirthDate,DeathDate,BirthLocation,DeathLocation,Father,Mother,Gender',
+    keys: wikiTreeId,
+    ancestors: String(Math.min(depth, 10)),
+    fields: FIELDS,
   });
 
   try {
@@ -125,16 +128,52 @@ export async function getWikiTreeAncestors(
       headers: { Accept: 'application/json' },
       next: { revalidate: 3600 },
     });
-    if (!res.ok) return [];
+    if (!res.ok) return {};
     const data = await res.json();
-    const ancestors: WikiTreeProfile[] = [];
-    if (data.ancestors) {
-      Object.values(data.ancestors).forEach((p) => {
-        ancestors.push(p as WikiTreeProfile);
-      });
+    const payload = Array.isArray(data) ? data[0] : data;
+    const rawPeople = payload?.people ?? {};
+
+    // Filter out placeholder entries (Id <= 0) and private profiles
+    const result: Record<number, WikiTreeProfile> = {};
+    for (const [, profile] of Object.entries(rawPeople)) {
+      const p = profile as WikiTreeProfile;
+      if (p.Id > 0 && !p.status?.includes('denied') && p.Name) {
+        result[p.Id] = p;
+      }
     }
-    return ancestors;
-  } catch {
-    return [];
+    return result;
+  } catch (err) {
+    console.error('WikiTree getAncestors error:', err);
+    return {};
   }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildDisplayName(p: WikiTreeProfile): string {
+  const given = p.FirstName ?? '';
+  const sur = p.LastNameAtBirth ?? p.LastNameCurrent ?? '';
+  return [given, sur].filter(Boolean).join(' ') || p.Name || 'Unknown';
+}
+
+export function parseWikiTreeYear(dateStr?: string): number | undefined {
+  if (!dateStr || dateStr.startsWith('0000')) return undefined;
+  const match = dateStr.match(/\d{4}/);
+  return match ? parseInt(match[0], 10) : undefined;
+}
+
+function scoreMatch(p: WikiTreeProfile, query: RecordSearchQuery): number {
+  let score = 50;
+  const birthYear = parseWikiTreeYear(p.BirthDate);
+  if (query.birthYear && birthYear) {
+    const diff = Math.abs(query.birthYear - birthYear);
+    if (diff === 0) score += 30;
+    else if (diff <= 2) score += 20;
+    else if (diff <= 5) score += 10;
+    else score -= 10;
+  }
+  if (query.birthPlace && p.BirthLocation?.toLowerCase().includes(query.birthPlace.toLowerCase())) {
+    score += 15;
+  }
+  return Math.max(0, Math.min(100, score));
 }
