@@ -484,7 +484,7 @@ export const useGenealogyStore = create<GenealogyStore>()(
       },
     }),
     {
-      name: 'ancestry-genealogy',
+      name: 'kinnect-genealogy',
       storage: createJSONStorage(() => localStorage),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

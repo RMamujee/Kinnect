@@ -87,7 +87,7 @@ export default function TreePage() {
       <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 z-20 flex-shrink-0">
         <div className="flex items-center gap-2">
           <TreePine className="w-5 h-5 text-primary-600" />
-          <span className="font-serif font-bold text-gray-900 text-sm">AncestryProject</span>
+          <span className="font-serif font-bold text-gray-900 text-sm">Kinnect</span>
         </div>
 
         <div className="flex-1" />

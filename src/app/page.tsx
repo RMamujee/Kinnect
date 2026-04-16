@@ -29,7 +29,7 @@ export default function HomePage() {
           <div className="w-14 h-14 bg-primary-600 rounded-2xl flex items-center justify-center shadow-lg">
             <TreePine className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-4xl font-serif font-bold text-gray-900">AncestryProject</h1>
+          <h1 className="text-4xl font-serif font-bold text-gray-900">Kinnect</h1>
         </div>
 
         <h2 className="text-2xl md:text-3xl font-serif text-gray-800 mb-4 leading-tight">
