@@ -1,18 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Search, Loader2, ExternalLink, UserPlus, CheckCircle, TreePine,
   ChevronDown, ChevronUp, AlertCircle, Newspaper, Globe, BookOpen,
-  Archive, Users, Lightbulb,
+  Archive, Users, Lightbulb, UserCircle2,
 } from 'lucide-react';
 import type { Person, RecordSearchResult } from '@/lib/types';
 import { getPreferredName, cn } from '@/lib/utils';
 import { useGenealogyStore } from '@/store/genealogyStore';
 
-interface Props {
-  person: Person;
-}
+interface Props { person: Person; }
 
 type ExtendStatus = 'idle' | 'loading' | 'done' | 'error' | 'private';
 
@@ -21,6 +19,13 @@ interface AncestorSuggestion {
   estimatedBirthYear?: number;
   estimatedBirthRange?: string | null;
   suggestions: RecordSearchResult[];
+}
+
+interface KinHit {
+  role: 'Father' | 'Mother' | 'Spouse';
+  name: string;
+  count: number;
+  maxConfidence: number;
 }
 
 const RELATION_LABELS: Record<string, string> = {
@@ -35,44 +40,104 @@ const RELATION_LABELS: Record<string, string> = {
   child:                'Child',
 };
 
+/** Aggregate kin names mentioned across search results */
+function extractKin(results: RecordSearchResult[]): KinHit[] {
+  type Role = 'Father' | 'Mother' | 'Spouse';
+  const tally = new Map<string, KinHit>();
+
+  function tally_(role: Role, rawName: string | undefined, confidence: number) {
+    if (!rawName?.trim()) return;
+    const name = rawName.trim();
+    const key = `${role}:${name.toLowerCase()}`;
+    const existing = tally.get(key);
+    if (existing) {
+      existing.count++;
+      existing.maxConfidence = Math.max(existing.maxConfidence, confidence);
+    } else {
+      tally.set(key, { role, name, count: 1, maxConfidence: confidence });
+    }
+  }
+
+  for (const r of results) {
+    tally_('Father', r.fatherName, r.confidence);
+    tally_('Mother', r.motherName, r.confidence);
+    tally_('Spouse', r.spouseName, r.confidence);
+  }
+
+  return [...tally.values()]
+    .filter(k => k.count >= 1 && k.maxConfidence >= 30)
+    .sort((a, b) => (b.count * b.maxConfidence) - (a.count * a.maxConfidence))
+    .slice(0, 12);
+}
+
+/** Read an SSE fetch stream, calling onEvent for each parsed JSON payload */
+async function readSSE(
+  response: Response,
+  onEvent: (data: Record<string, unknown>) => void,
+) {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          onEvent(JSON.parse(line.slice(6)));
+        } catch {}
+      }
+    }
+  }
+}
+
 export function RecordSearch({ person }: Props) {
   const [results, setResults]           = useState<RecordSearchResult[]>([]);
   const [loading, setLoading]           = useState(false);
   const [searched, setSearched]         = useState(false);
+  const [sourcesTotal, setSourcesTotal] = useState(0);
+  const [sourcesDone, setSourcesDone]   = useState(0);
   const [importedIds, setImportedIds]   = useState<Set<string>>(new Set());
+  const [kinHits, setKinHits]           = useState<KinHit[]>([]);
+
   const [extendStatus, setExtendStatus] = useState<ExtendStatus>('idle');
   const [extendStats, setExtendStats]   = useState<{ added: number; skipped: number } | null>(null);
   const [extendDepth, setExtendDepth]   = useState(6);
   const [showDepthPicker, setShowDepthPicker] = useState(false);
+
   const [suggestions, setSuggestions]   = useState<AncestorSuggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestOpen, setSuggestOpen]   = useState(false);
+
+  // Abort SSE on re-search
+  const abortRef = useRef<AbortController | null>(null);
 
   const {
     persons, families,
     addSource, addCitation, addFact, updatePerson,
     importExternalPersons, getExistingWikiTreeIds,
   } = useGenealogyStore(s => ({
-    persons:              s.persons,
-    families:             s.families,
-    addSource:            s.addSource,
-    addCitation:          s.addCitation,
-    addFact:              s.addFact,
-    updatePerson:         s.updatePerson,
-    importExternalPersons:s.importExternalPersons,
+    persons:               s.persons,
+    families:              s.families,
+    addSource:             s.addSource,
+    addCitation:           s.addCitation,
+    addFact:               s.addFact,
+    updatePerson:          s.updatePerson,
+    importExternalPersons: s.importExternalPersons,
     getExistingWikiTreeIds: s.getExistingWikiTreeIds,
   }));
 
-  /** Which relations are missing for this person */
   function getMissingRelations(): string[] {
     const missing: string[] = [];
-    // Does this person appear as a child in any family?
     const asChild = Object.values(families).find(f => f.childIds.includes(person.id));
     const hasFather = asChild?.spouse1Id && persons[asChild.spouse1Id]?.gender === 'male';
     const hasMother = asChild?.spouse2Id && persons[asChild.spouse2Id]?.gender === 'female';
     if (!hasFather) missing.push('father');
     if (!hasMother) missing.push('mother');
-    // Grandparents if we have parents
     if (hasFather && asChild?.spouse1Id) {
       const dadAsChild = Object.values(families).find(f => f.childIds.includes(asChild.spouse1Id!));
       if (!dadAsChild) { missing.push('paternal_grandfather', 'paternal_grandmother'); }
@@ -88,22 +153,49 @@ export function RecordSearch({ person }: Props) {
     const preferred = person.names.find(n => n.isPreferred) ?? person.names[0];
     if (!preferred) return;
 
+    // Cancel any in-flight search
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     setLoading(true);
     setSearched(false);
+    setResults([]);
+    setKinHits([]);
+    setSourcesTotal(0);
+    setSourcesDone(0);
 
     const params = new URLSearchParams({ givenName: preferred.given, surname: preferred.surname });
     if (person.birthYear)  params.set('birthYear',  String(person.birthYear));
     if (person.birthPlace) params.set('birthPlace', person.birthPlace);
 
+    const accumulated: RecordSearchResult[] = [];
+
     try {
-      const res  = await fetch(`/api/records/search?${params}`);
-      const data = await res.json();
-      setResults(data.results ?? []);
-    } catch {
-      setResults([]);
-    } finally {
-      setLoading(false);
-      setSearched(true);
+      const res = await fetch(`/api/records/search?${params}`, {
+        signal: abortRef.current.signal,
+      });
+
+      await readSSE(res, data => {
+        if (data.searching) {
+          setSourcesTotal(data.searching as number);
+        } else if (data.results) {
+          const incoming = data.results as RecordSearchResult[];
+          accumulated.push(...incoming);
+          setSourcesDone(n => n + 1);
+          // Sort by confidence descending, update immediately
+          const sorted = [...accumulated].sort((a, b) => b.confidence - a.confidence);
+          setResults(sorted);
+          setKinHits(extractKin(sorted));
+        } else if (data.done) {
+          setLoading(false);
+          setSearched(true);
+        }
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setLoading(false);
+        setSearched(true);
+      }
     }
   }
 
@@ -116,16 +208,13 @@ export function RecordSearch({ person }: Props) {
     setSuggestions([]);
 
     const missingRelations = getMissingRelations();
-    if (missingRelations.length === 0) {
-      setSuggestLoading(false);
-      return;
-    }
+    if (missingRelations.length === 0) { setSuggestLoading(false); return; }
 
     try {
       const res = await fetch('/api/ancestors/suggest', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           person: {
             givenName:  preferred.given,
             surname:    preferred.surname,
@@ -136,25 +225,29 @@ export function RecordSearch({ person }: Props) {
           missingRelations,
         }),
       });
-      const data = await res.json();
-      setSuggestions(data.suggestions ?? []);
+
+      await readSSE(res, data => {
+        if (data.relation) {
+          setSuggestions(prev => [...prev, data as unknown as AncestorSuggestion]);
+        } else if (data.done) {
+          setSuggestLoading(false);
+        }
+      });
     } catch {
-      setSuggestions([]);
-    } finally {
       setSuggestLoading(false);
     }
   }
 
   function handleImport(result: RecordSearchResult) {
     const source = addSource({
-      title:         `${result.name} — ${result.publicationName ?? result.source} record`,
-      recordType:    result.recordType,
-      evidenceType:  'original',
+      title:           `${result.name} — ${result.publicationName ?? result.source} record`,
+      recordType:      result.recordType,
+      evidenceType:    'original',
       informationType: 'primary',
-      quality:       2,
-      url:           result.url,
-      repositoryUrl: result.url,
-      accessDate:    new Date().toISOString().split('T')[0],
+      quality:         2,
+      url:             result.url,
+      repositoryUrl:   result.url,
+      accessDate:      new Date().toISOString().split('T')[0],
     });
 
     const updates: Partial<Person> = {};
@@ -164,11 +257,11 @@ export function RecordSearch({ person }: Props) {
 
     if (result.birthYear && !person.birthYear) {
       const fact = addFact(person.id, {
-        type:       'birth',
-        date:       { year: result.birthYear },
-        place:      result.birthPlace ? { fullText: result.birthPlace } : undefined,
-        confidence: 'probable',
-        citationIds:[],
+        type:        'birth',
+        date:        { year: result.birthYear },
+        place:       result.birthPlace ? { fullText: result.birthPlace } : undefined,
+        confidence:  'probable',
+        citationIds: [],
         isPreferred: true,
       });
       addCitation({
@@ -189,9 +282,9 @@ export function RecordSearch({ person }: Props) {
     try {
       const existingWikiTreeIds = getExistingWikiTreeIds();
       const res = await fetch('/api/tree/extend', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wikiTreeId, depth: extendDepth, existingWikiTreeIds }),
+        body:    JSON.stringify({ wikiTreeId, depth: extendDepth, existingWikiTreeIds }),
       });
       if (!res.ok) throw new Error('extend failed');
       const data = await res.json();
@@ -205,12 +298,19 @@ export function RecordSearch({ person }: Props) {
   }
 
   const currentWikiTreeId = useGenealogyStore(s => s.persons[person.id]?.wikiTreeId);
-  const missingCount = getMissingRelations().length;
+  const missingCount      = getMissingRelations().length;
+
+  // Progress label while streaming
+  const progressLabel = loading
+    ? sourcesTotal > 0
+      ? `${results.length} found · searching ${sourcesTotal - sourcesDone} more sources…`
+      : 'Connecting to databases…'
+    : null;
 
   return (
     <div className="space-y-4">
 
-      {/* ── Auto-extend (WikiTree linked) ───────────────────────────────────── */}
+      {/* ── Auto-extend (WikiTree linked) ──────────────────────────────── */}
       {currentWikiTreeId && (
         <div className="rounded-xl border-2 border-primary-200 bg-primary-50 p-4 space-y-3">
           <div className="flex items-center gap-2">
@@ -220,7 +320,6 @@ export function RecordSearch({ person }: Props) {
           <p className="text-xs text-primary-700">
             WikiTree ID <strong>{currentWikiTreeId}</strong> is linked. Fetch ancestors automatically.
           </p>
-
           <div>
             <button
               onClick={() => setShowDepthPicker(s => !s)}
@@ -244,7 +343,6 @@ export function RecordSearch({ person }: Props) {
               </div>
             )}
           </div>
-
           {extendStatus === 'idle' || extendStatus === 'error' ? (
             <button onClick={() => handleExtendTree(currentWikiTreeId)}
               className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
@@ -278,7 +376,7 @@ export function RecordSearch({ person }: Props) {
         </div>
       )}
 
-      {/* ── Ancestor / Kin Suggestions ──────────────────────────────────────── */}
+      {/* ── Ancestor / Kin Suggestions ──────────────────────────────────── */}
       {missingCount > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
           <button
@@ -289,7 +387,8 @@ export function RecordSearch({ person }: Props) {
             <div className="flex-1">
               <div className="text-sm font-semibold text-amber-800">Find Missing Ancestors</div>
               <div className="text-xs text-amber-600">
-                {missingCount} relation{missingCount !== 1 ? 's' : ''} not yet in tree — search across 14+ databases
+                {missingCount} relation{missingCount !== 1 ? 's' : ''} not yet in tree
+                {suggestLoading && suggestions.length > 0 && ` · ${suggestions.length} relations found so far`}
               </div>
             </div>
             {suggestLoading
@@ -300,7 +399,7 @@ export function RecordSearch({ person }: Props) {
             }
           </button>
 
-          {suggestOpen && !suggestLoading && suggestions.length > 0 && (
+          {suggestOpen && suggestions.length > 0 && (
             <div className="border-t border-amber-200 divide-y divide-amber-100">
               {suggestions.map(group => (
                 <div key={group.relation} className="px-4 py-3 space-y-2">
@@ -310,13 +409,11 @@ export function RecordSearch({ person }: Props) {
                       {RELATION_LABELS[group.relation] ?? group.relation}
                     </span>
                     {group.estimatedBirthRange && (
-                      <span className="text-xs text-amber-600 ml-auto">
-                        est. b. {group.estimatedBirthRange}
-                      </span>
+                      <span className="text-xs text-amber-600 ml-auto">est. b. {group.estimatedBirthRange}</span>
                     )}
                   </div>
                   {group.suggestions.length === 0 ? (
-                    <p className="text-xs text-amber-600">No matches found across searched databases.</p>
+                    <p className="text-xs text-amber-600">No matches found.</p>
                   ) : (
                     <div className="space-y-1.5">
                       {group.suggestions.slice(0, 5).map(result => (
@@ -332,18 +429,24 @@ export function RecordSearch({ person }: Props) {
                   )}
                 </div>
               ))}
+              {suggestLoading && (
+                <div className="px-4 py-3 flex items-center gap-2 text-xs text-amber-600">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Searching remaining relations…
+                </div>
+              )}
             </div>
           )}
 
           {suggestOpen && !suggestLoading && suggestions.length === 0 && (
             <div className="border-t border-amber-200 px-4 py-3 text-xs text-amber-600">
-              No suggestions found. Try adding birth year or location to improve results.
+              No suggestions found. Add a birth year or location to improve results.
             </div>
           )}
         </div>
       )}
 
-      {/* ── Manual record search ────────────────────────────────────────────── */}
+      {/* ── Manual record search ────────────────────────────────────────── */}
       <div>
         <p className="text-xs text-gray-500 mb-3">
           Search public genealogy databases for records matching{' '}
@@ -355,27 +458,27 @@ export function RecordSearch({ person }: Props) {
           className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 disabled:bg-gray-400 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-          {loading ? 'Searching 14+ databases…' : 'Search All Public Records'}
+          {loading ? 'Searching…' : 'Search All Public Records'}
         </button>
-        <p className="text-xs text-gray-400 mt-1.5 text-center leading-relaxed">
-          WikiTree · FamilySearch · Chronicling America · Wikipedia · Internet Archive ·
-          Wikidata · NARA · DPLA · Open Library · Trove · LOC · Europeana · SNAC · News
-        </p>
+        {progressLabel ? (
+          <p className="text-xs text-primary-600 mt-1.5 text-center font-medium animate-pulse">
+            {progressLabel}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 mt-1.5 text-center leading-relaxed">
+            WikiTree · FamilySearch · Chronicling America · Wikipedia · Internet Archive ·
+            Wikidata · NARA · DPLA · Open Library · Trove · LOC · Europeana · SNAC · News
+          </p>
+        )}
       </div>
 
-      {searched && results.length === 0 && (
-        <div className="text-center py-8 text-gray-400">
-          <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No records found.</p>
-          <p className="text-xs mt-1">Try different name spellings or add a birth year.</p>
-        </div>
-      )}
-
+      {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-500">
-            {results.length} result{results.length !== 1 ? 's' : ''} across{' '}
-            14+ databases — click import to link &amp; cite a record
+            {results.length} result{results.length !== 1 ? 's' : ''}
+            {loading ? <span className="text-primary-500"> · still searching…</span> : ' across 14+ databases'}
+            {' '}— click import to link &amp; cite a record
           </p>
           {results.map(result => (
             <RecordResultCard
@@ -387,6 +490,48 @@ export function RecordSearch({ person }: Props) {
           ))}
         </div>
       )}
+
+      {/* ── Kin Found in Records ────────────────────────────────────────── */}
+      {kinHits.length > 0 && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <UserCircle2 className="w-4 h-4 text-violet-600" />
+            <span className="text-sm font-semibold text-violet-800">Kin Found in Records</span>
+            <span className="text-xs text-violet-500 ml-auto">
+              Names mentioned in search results
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {kinHits.map((kin, i) => (
+              <div key={i} className="flex items-center gap-3 text-xs">
+                <span className={cn(
+                  'px-2 py-0.5 rounded-full font-semibold flex-shrink-0',
+                  kin.role === 'Father' ? 'bg-blue-100 text-blue-700'
+                  : kin.role === 'Mother' ? 'bg-pink-100 text-pink-700'
+                  : 'bg-purple-100 text-purple-700'
+                )}>
+                  {kin.role}
+                </span>
+                <span className="font-medium text-gray-800 flex-1 truncate">{kin.name}</span>
+                <span className="text-gray-400 flex-shrink-0">
+                  {kin.count > 1 ? `${kin.count} records` : '1 record'} · {kin.maxConfidence}% match
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-violet-600">
+            Use <strong>Add Person</strong> above to add these relatives to your tree.
+          </p>
+        </div>
+      )}
+
+      {searched && results.length === 0 && (
+        <div className="text-center py-8 text-gray-400">
+          <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No records found.</p>
+          <p className="text-xs mt-1">Try different name spellings or add a birth year.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -394,14 +539,14 @@ export function RecordSearch({ person }: Props) {
 // ── Source metadata ────────────────────────────────────────────────────────────
 
 const SOURCE_META: Record<string, { label: string; bg: string; icon: React.ReactNode }> = {
-  familysearch: { label: 'FamilySearch',        bg: 'bg-green-100 text-green-700',   icon: <Globe    className="w-3 h-3" /> },
-  wikitree:     { label: 'WikiTree',            bg: 'bg-blue-100 text-blue-700',     icon: <TreePine className="w-3 h-3" /> },
-  findagrave:   { label: 'Find A Grave',        bg: 'bg-stone-100 text-stone-700',   icon: <Globe    className="w-3 h-3" /> },
-  newspaper:    { label: 'Historic Newspaper',  bg: 'bg-amber-100 text-amber-700',   icon: <Newspaper className="w-3 h-3" /> },
-  wikipedia:    { label: 'Wikipedia/Wikidata',  bg: 'bg-slate-100 text-slate-700',   icon: <BookOpen className="w-3 h-3" /> },
-  archive:      { label: 'Digital Archive',     bg: 'bg-violet-100 text-violet-700', icon: <Archive  className="w-3 h-3" /> },
-  news:         { label: 'News Article',        bg: 'bg-sky-100 text-sky-700',       icon: <Globe    className="w-3 h-3" /> },
-  other:        { label: 'Record',              bg: 'bg-gray-100 text-gray-700',     icon: <Globe    className="w-3 h-3" /> },
+  familysearch: { label: 'FamilySearch',       bg: 'bg-green-100 text-green-700',   icon: <Globe     className="w-3 h-3" /> },
+  wikitree:     { label: 'WikiTree',           bg: 'bg-blue-100 text-blue-700',     icon: <TreePine  className="w-3 h-3" /> },
+  findagrave:   { label: 'Find A Grave',       bg: 'bg-stone-100 text-stone-700',   icon: <Globe     className="w-3 h-3" /> },
+  newspaper:    { label: 'Historic Newspaper', bg: 'bg-amber-100 text-amber-700',   icon: <Newspaper className="w-3 h-3" /> },
+  wikipedia:    { label: 'Wikipedia/Wikidata', bg: 'bg-slate-100 text-slate-700',   icon: <BookOpen  className="w-3 h-3" /> },
+  archive:      { label: 'Digital Archive',    bg: 'bg-violet-100 text-violet-700', icon: <Archive   className="w-3 h-3" /> },
+  news:         { label: 'News Article',       bg: 'bg-sky-100 text-sky-700',       icon: <Globe     className="w-3 h-3" /> },
+  other:        { label: 'Record',             bg: 'bg-gray-100 text-gray-700',     icon: <Globe     className="w-3 h-3" /> },
 };
 
 // ── Result card ────────────────────────────────────────────────────────────────
@@ -452,6 +597,7 @@ function RecordResultCard({
                 {result.deathYear && <div>d. {result.deathYear}{result.deathPlace ? ` · ${result.deathPlace}` : ''}</div>}
                 {result.fatherName && <div>Father: {result.fatherName}</div>}
                 {result.motherName && <div>Mother: {result.motherName}</div>}
+                {result.spouseName && <div>Spouse: {result.spouseName}</div>}
               </div>
             )}
 
