@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { TreePine, Users, Plus, Menu, X, FlaskConical } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { useHydration } from '@/store/useHydration';
@@ -56,7 +57,7 @@ export default function TreePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ancestry-cream">
         <div className="text-center max-w-sm px-4">
-          <TreePine className="w-12 h-12 text-primary-600 mx-auto mb-4" />
+          <Image src="/logo.png" alt="Kinnect" width={120} height={120} className="mx-auto mb-4" />
           <h2 className="text-xl font-serif font-bold text-gray-900 mb-2">No family tree yet</h2>
           <p className="text-gray-500 text-sm mb-6">Start by entering your family or load demo data to explore the app.</p>
           <div className="flex flex-col gap-3">
@@ -88,9 +89,8 @@ export default function TreePage() {
     <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
       {/* Top nav */}
       <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 z-20 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <TreePine className="w-5 h-5 text-primary-600" />
-          <span className="font-serif font-bold text-gray-900 text-sm">Kinnect</span>
+        <div className="flex items-center">
+          <Image src="/logo.png" alt="Kinnect" width={90} height={90} />
         </div>
 
         <div className="flex-1" />

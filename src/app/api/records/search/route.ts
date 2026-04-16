@@ -6,6 +6,14 @@ import { searchChroniclingAmerica } from '@/lib/chroniclingamerica';
 import { searchWikipedia }          from '@/lib/wikipedia';
 import { searchInternetArchive }    from '@/lib/internetarchive';
 import { searchGoogleNews, searchBingNews } from '@/lib/googlenews';
+import { searchWikidata }           from '@/lib/wikidata';
+import { searchNARA }               from '@/lib/nara';
+import { searchDPLA }               from '@/lib/dpla';
+import { searchOpenLibrary }        from '@/lib/openlibrary';
+import { searchTrove }              from '@/lib/trove';
+import { searchLOCCollections }     from '@/lib/loc';
+import { searchEuropeana }          from '@/lib/europeana';
+import { searchSNAC }               from '@/lib/snac';
 import type { RecordSearchQuery, RecordSearchResult } from '@/lib/types';
 
 const querySchema = z.object({
@@ -23,8 +31,13 @@ const querySchema = z.object({
   sources:       z.string().optional(), // comma-separated source names
 });
 
-// All sources available — caller can restrict via ?sources=wikitree,newspaper
-const ALL_SOURCES = ['wikitree', 'newspaper', 'wikipedia', 'archive', 'news'] as const;
+// All source keys — caller can restrict via ?sources=wikitree,newspaper
+const ALL_SOURCES = [
+  'wikitree', 'familysearch',
+  'newspaper', 'wikipedia', 'archive', 'news',
+  'wikidata', 'nara', 'dpla', 'openlibrary',
+  'trove', 'loc', 'europeana', 'snac',
+] as const;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -47,17 +60,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Default: run everything except FamilySearch (requires OAuth)
+  // Default: run all sources except FamilySearch (requires OAuth token)
   const requestedSources = sourcesParam
     ? sourcesParam.split(',').map(s => s.trim())
-    : [...ALL_SOURCES];
+    : ALL_SOURCES.filter(s => s !== 'familysearch');
 
   const accessToken = request.headers.get('x-familysearch-token') ?? undefined;
 
   // Build parallel search promises
   const jobs: Promise<RecordSearchResult[]>[] = [];
 
-  if (requestedSources.includes('familysearch')) {
+  if (requestedSources.includes('familysearch') && accessToken) {
     jobs.push(searchFamilySearch(query, accessToken));
   }
   if (requestedSources.includes('wikitree')) {
@@ -73,24 +86,55 @@ export async function GET(request: NextRequest) {
     jobs.push(searchInternetArchive(query));
   }
   if (requestedSources.includes('news')) {
-    // Try Bing first (higher quality); fall back to Google News RSS
     const bingKey = process.env.BING_NEWS_API_KEY;
     jobs.push(bingKey ? searchBingNews(query) : searchGoogleNews(query));
+  }
+  // ── New sources ──────────────────────────────────────────────────────────────
+  if (requestedSources.includes('wikidata')) {
+    jobs.push(searchWikidata(query));
+  }
+  if (requestedSources.includes('nara')) {
+    jobs.push(searchNARA(query));
+  }
+  if (requestedSources.includes('dpla')) {
+    jobs.push(searchDPLA(query));
+  }
+  if (requestedSources.includes('openlibrary')) {
+    jobs.push(searchOpenLibrary(query));
+  }
+  if (requestedSources.includes('trove')) {
+    jobs.push(searchTrove(query));
+  }
+  if (requestedSources.includes('loc')) {
+    jobs.push(searchLOCCollections(query));
+  }
+  if (requestedSources.includes('europeana')) {
+    jobs.push(searchEuropeana(query));
+  }
+  if (requestedSources.includes('snac')) {
+    jobs.push(searchSNAC(query));
   }
 
   const settled = await Promise.allSettled(jobs);
   const allResults: RecordSearchResult[] = [];
-
   settled.forEach(r => {
     if (r.status === 'fulfilled') allResults.push(...r.value);
   });
 
-  // Sort by confidence descending
-  allResults.sort((a, b) => b.confidence - a.confidence);
+  // Deduplicate by URL, keeping highest-confidence version
+  const byUrl = new Map<string, RecordSearchResult>();
+  for (const r of allResults) {
+    const key = r.url ?? `${r.source}-${r.externalId}`;
+    const existing = byUrl.get(key);
+    if (!existing || r.confidence > existing.confidence) byUrl.set(key, r);
+  }
+
+  const deduped = [...byUrl.values()].sort((a, b) => b.confidence - a.confidence);
 
   return NextResponse.json({
-    results: allResults,
-    total:   allResults.length,
+    results: deduped,
+    total:   deduped.length,
     sources: requestedSources,
+    sourcesQueried: jobs.length,
   });
 }

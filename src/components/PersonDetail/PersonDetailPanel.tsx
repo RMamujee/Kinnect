@@ -18,9 +18,10 @@ interface Props {
 export function PersonDetailPanel({ personId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('details');
 
-  const { person, updatePerson, sources, citations } = useGenealogyStore(s => ({
+  const { person, updatePerson, deletePerson, sources, citations } = useGenealogyStore(s => ({
     person: s.persons[personId],
     updatePerson: s.updatePerson,
+    deletePerson: s.deletePerson,
     sources: s.sources,
     citations: s.citations,
   }));
@@ -144,6 +145,22 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
         {tab === 'records' && (
           <RecordSearch person={person} />
         )}
+      </div>
+
+      {/* Delete */}
+      <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+        <button
+          onClick={() => {
+            if (confirm(`Delete ${name}? This cannot be undone.`)) {
+              deletePerson(personId);
+              onClose();
+            }
+          }}
+          className="w-full py-2 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete Person
+        </button>
       </div>
     </div>
   );
