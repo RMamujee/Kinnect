@@ -4,16 +4,22 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { TreePine, Search, Shield, Globe, ArrowRight, Users } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
+import { useHydration } from '@/store/useHydration';
+import { LoadingScreen } from '@/components/UI/LoadingScreen';
 
 export default function HomePage() {
   const router = useRouter();
+  const hydrated = useHydration();
   const onboardingComplete = useGenealogyStore(s => s.onboardingComplete);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (onboardingComplete) {
       router.replace('/tree');
     }
-  }, [onboardingComplete, router]);
+  }, [hydrated, onboardingComplete, router]);
+
+  if (!hydrated) return <LoadingScreen />;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-ancestry-cream via-white to-primary-50">

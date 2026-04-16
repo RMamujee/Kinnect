@@ -9,6 +9,11 @@ import type {
 import { nowISO, generateId } from '@/lib/utils';
 
 interface GenealogyStore extends GenealogyState {
+  // Hydration
+  _hasHydrated: boolean;
+  setHasHydrated: (val: boolean) => void;
+  clearAll: () => void;
+
   // Person actions
   addPerson: (data: Partial<Person> & { names: PersonName[] }) => Person;
   updatePerson: (id: string, data: Partial<Person>) => void;
@@ -148,6 +153,19 @@ export const useGenealogyStore = create<GenealogyStore>()(
       rootPersonId: null,
       selectedPersonId: null,
       onboardingComplete: false,
+      _hasHydrated: false,
+
+      setHasHydrated: (val) => set({ _hasHydrated: val }),
+
+      clearAll: () => set({
+        persons: {},
+        families: {},
+        sources: {},
+        citations: {},
+        rootPersonId: null,
+        selectedPersonId: null,
+        onboardingComplete: false,
+      }),
 
       addPerson: (data) => {
         const id = generateId();
@@ -468,6 +486,18 @@ export const useGenealogyStore = create<GenealogyStore>()(
     {
       name: 'ancestry-genealogy',
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+      // Don't persist transient UI state
+      partialize: (state) => ({
+        persons: state.persons,
+        families: state.families,
+        sources: state.sources,
+        citations: state.citations,
+        rootPersonId: state.rootPersonId,
+        onboardingComplete: state.onboardingComplete,
+      }),
     }
   )
 );

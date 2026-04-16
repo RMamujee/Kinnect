@@ -2,8 +2,11 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { TreePine, Users, Plus, Download, Upload, Menu, X } from 'lucide-react';
+import { TreePine, Users, Plus, Menu, X } from 'lucide-react';
 import { useGenealogyStore } from '@/store/genealogyStore';
+import { useHydration } from '@/store/useHydration';
+import { LoadingScreen } from '@/components/UI/LoadingScreen';
+import { RotateCcw } from 'lucide-react';
 import { FamilyTreeView } from '@/components/FamilyTree/FamilyTreeView';
 import { PersonDetailPanel } from '@/components/PersonDetail/PersonDetailPanel';
 import { AutoBuildBanner } from '@/components/FamilyTree/AutoBuildBanner';
@@ -11,6 +14,7 @@ import { cn, getPreferredName, formatLifespan } from '@/lib/utils';
 
 export default function TreePage() {
   const router = useRouter();
+  const hydrated = useHydration();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchRecordsPersonId, setSearchRecordsPersonId] = useState<string | null>(null);
 
@@ -20,18 +24,29 @@ export default function TreePage() {
     setSelectedPerson,
     rootPersonId,
     onboardingComplete,
+    clearAll,
   } = useGenealogyStore(s => ({
     persons: s.persons,
     selectedPersonId: s.selectedPersonId,
     setSelectedPerson: s.setSelectedPerson,
     rootPersonId: s.rootPersonId,
     onboardingComplete: s.onboardingComplete,
+    clearAll: s.clearAll,
   }));
+
+  function handleClearAll() {
+    if (confirm('Start over? This will delete your entire tree from this device.')) {
+      clearAll();
+      router.replace('/onboarding');
+    }
+  }
 
   const handleSearchRecords = useCallback((personId: string) => {
     setSelectedPerson(personId);
     setSearchRecordsPersonId(personId);
   }, [setSelectedPerson]);
+
+  if (!hydrated) return <LoadingScreen />;
 
   if (!onboardingComplete) {
     return (
@@ -75,6 +90,14 @@ export default function TreePage() {
         >
           <Plus className="w-3.5 h-3.5" />
           Add Person
+        </button>
+
+        <button
+          onClick={handleClearAll}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          title="Clear tree and start over"
+        >
+          <RotateCcw className="w-4 h-4" />
         </button>
 
         <button
