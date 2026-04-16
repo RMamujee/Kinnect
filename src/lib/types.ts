@@ -214,6 +214,16 @@ export interface GPSStatus {
 
 // ─── Search & Records ─────────────────────────────────────────────────────────
 
+export type RecordSource =
+  | 'familysearch'
+  | 'wikitree'
+  | 'findagrave'
+  | 'newspaper'     // Chronicling America (LOC)
+  | 'wikipedia'     // Wikipedia articles
+  | 'archive'       // Internet Archive
+  | 'news'          // Google News / RSS
+  | 'other';
+
 export interface RecordSearchQuery {
   givenName?: string;
   surname?: string;
@@ -225,13 +235,14 @@ export interface RecordSearchQuery {
   fatherName?: string;
   motherName?: string;
   spouseName?: string;
+  occupation?: string;
   recordTypes?: RecordType[];
-  sources?: ('familysearch' | 'wikitree' | 'findagrave')[];
+  sources?: RecordSource[];
 }
 
 export interface RecordSearchResult {
   id: string;
-  source: 'familysearch' | 'wikitree' | 'findagrave' | 'other';
+  source: RecordSource;
   externalId: string;
   name: string;
   birthYear?: number;
@@ -244,6 +255,9 @@ export interface RecordSearchResult {
   recordType: RecordType;
   confidence: number; // 0-100 match score
   url?: string;
+  snippet?: string;   // excerpt / article text preview
+  publicationDate?: string; // for newspaper/news results
+  publicationName?: string; // newspaper title
   rawData?: Record<string, unknown>;
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Loader2, ExternalLink, UserPlus, CheckCircle, TreePine, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Search, Loader2, ExternalLink, UserPlus, CheckCircle, TreePine, ChevronDown, ChevronUp, AlertCircle, Newspaper, Globe, BookOpen, Archive } from 'lucide-react';
 import type { Person, RecordSearchResult } from '@/lib/types';
 import { getPreferredName, cn } from '@/lib/utils';
 import { useGenealogyStore } from '@/store/genealogyStore';
@@ -227,7 +227,7 @@ export function RecordSearch({ person }: Props) {
           {loading ? 'Searching…' : 'Search Public Records'}
         </button>
         <p className="text-xs text-gray-400 mt-1.5 text-center">
-          Searches WikiTree public profiles
+          WikiTree · Chronicling America · Wikipedia · Internet Archive · News
         </p>
       </div>
 
@@ -256,6 +256,17 @@ export function RecordSearch({ person }: Props) {
   );
 }
 
+const SOURCE_META: Record<string, { label: string; bg: string; icon: React.ReactNode }> = {
+  familysearch: { label: 'FamilySearch',          bg: 'bg-green-100 text-green-700',   icon: <Globe className="w-3 h-3" /> },
+  wikitree:     { label: 'WikiTree',              bg: 'bg-blue-100 text-blue-700',     icon: <TreePine className="w-3 h-3" /> },
+  findagrave:   { label: 'Find A Grave',          bg: 'bg-stone-100 text-stone-700',   icon: <Globe className="w-3 h-3" /> },
+  newspaper:    { label: 'Historic Newspaper',    bg: 'bg-amber-100 text-amber-700',   icon: <Newspaper className="w-3 h-3" /> },
+  wikipedia:    { label: 'Wikipedia',             bg: 'bg-slate-100 text-slate-700',   icon: <BookOpen className="w-3 h-3" /> },
+  archive:      { label: 'Internet Archive',      bg: 'bg-violet-100 text-violet-700', icon: <Archive className="w-3 h-3" /> },
+  news:         { label: 'News Article',          bg: 'bg-sky-100 text-sky-700',       icon: <Globe className="w-3 h-3" /> },
+  other:        { label: 'Other',                 bg: 'bg-gray-100 text-gray-700',     icon: <Globe className="w-3 h-3" /> },
+};
+
 function RecordResultCard({
   result, imported, onImport,
 }: {
@@ -263,55 +274,71 @@ function RecordResultCard({
   imported: boolean;
   onImport: () => void;
 }) {
-  const sourceBg: Record<string, string> = {
-    familysearch: 'bg-green-100 text-green-700',
-    wikitree: 'bg-blue-100 text-blue-700',
-    findagrave: 'bg-stone-100 text-stone-700',
-    other: 'bg-gray-100 text-gray-700',
-  };
-  const sourceLabel: Record<string, string> = {
-    familysearch: 'FamilySearch',
-    wikitree: 'WikiTree',
-    findagrave: 'Find A Grave',
-    other: 'Other',
-  };
+  const meta = SOURCE_META[result.source] ?? SOURCE_META.other;
+  const isLinkable = result.source === 'wikitree';
+  const isArticle  = ['newspaper', 'news', 'wikipedia', 'archive'].includes(result.source);
 
   return (
-    <div className="p-3 rounded-xl border border-gray-200 hover:border-primary-200 hover:bg-primary-50/30 transition-colors">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-gray-900 truncate">{result.name}</span>
-            <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium', sourceBg[result.source] ?? sourceBg.other)}>
-              {sourceLabel[result.source] ?? 'Other'}
-            </span>
-            <span className="text-xs text-gray-400">{result.confidence}% match</span>
+    <div className="rounded-xl border border-gray-200 hover:border-primary-200 hover:bg-primary-50/30 transition-colors overflow-hidden">
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            {/* Title row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-gray-900 truncate">{result.name}</span>
+              <span className={cn('flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium', meta.bg)}>
+                {meta.icon}{meta.label}
+              </span>
+              <span className="text-xs text-gray-400">{result.confidence}%</span>
+            </div>
+
+            {/* Publication / date for articles */}
+            {isArticle && (result.publicationName || result.publicationDate) && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {result.publicationName && <span className="font-medium">{result.publicationName}</span>}
+                {result.publicationDate && <span className="text-gray-400"> · {result.publicationDate}</span>}
+              </p>
+            )}
+
+            {/* Genealogy facts for person-record sources */}
+            {!isArticle && (
+              <div className="mt-1 text-xs text-gray-500 space-y-0.5">
+                {result.birthYear && <div>b. {result.birthYear}{result.birthPlace ? ` · ${result.birthPlace}` : ''}</div>}
+                {result.deathYear && <div>d. {result.deathYear}{result.deathPlace ? ` · ${result.deathPlace}` : ''}</div>}
+                {result.fatherName && <div>Father: {result.fatherName}</div>}
+                {result.motherName && <div>Mother: {result.motherName}</div>}
+              </div>
+            )}
+
+            {isLinkable && !imported && (
+              <p className="text-xs text-primary-600 mt-1">↳ Import to enable auto-extend tree</p>
+            )}
           </div>
-          <div className="mt-1 text-xs text-gray-500 space-y-0.5">
-            {result.birthYear && <div>b. {result.birthYear}{result.birthPlace ? ` · ${result.birthPlace}` : ''}</div>}
-            {result.deathYear && <div>d. {result.deathYear}{result.deathPlace ? ` · ${result.deathPlace}` : ''}</div>}
-            {result.fatherName && <div>Father: {result.fatherName}</div>}
-            {result.motherName && <div>Mother: {result.motherName}</div>}
+
+          {/* Actions */}
+          <div className="flex flex-col gap-1.5 flex-shrink-0">
+            {result.url && (
+              <a href={result.url} target="_blank" rel="noopener noreferrer"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                title="View source">
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+            <button onClick={onImport} disabled={imported}
+              className={cn('p-1.5 rounded-lg transition-colors',
+                imported ? 'text-green-500 bg-green-50' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50')}
+              title={imported ? 'Saved to record' : 'Save to this person\'s record'}>
+              {imported ? <CheckCircle className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
+            </button>
           </div>
-          {result.source === 'wikitree' && !imported && (
-            <p className="text-xs text-primary-600 mt-1">
-              ↳ Import to enable auto-extend tree
-            </p>
-          )}
         </div>
-        <div className="flex flex-col gap-1.5">
-          {result.url && (
-            <a href={result.url} target="_blank" rel="noopener noreferrer"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors" title="View source">
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
-          <button onClick={onImport} disabled={imported}
-            className={cn('p-1.5 rounded-lg transition-colors', imported ? 'text-green-500 bg-green-50' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50')}
-            title={imported ? 'Imported' : 'Import to tree'}>
-            {imported ? <CheckCircle className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
-          </button>
-        </div>
+
+        {/* Snippet / excerpt for article sources */}
+        {isArticle && result.snippet && (
+          <p className="mt-2 text-xs text-gray-500 leading-relaxed line-clamp-3 border-t border-gray-100 pt-2">
+            {result.snippet}
+          </p>
+        )}
       </div>
     </div>
   );
