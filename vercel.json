@@ -3,11 +3,5 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "regions": ["iad1"],
-  "env": {
-    "FAMILYSEARCH_CLIENT_ID": "@familysearch_client_id",
-    "FAMILYSEARCH_CLIENT_SECRET": "@familysearch_client_secret",
-    "FAMILYSEARCH_BASE_URL": "https://api.familysearch.org",
-    "WIKITREE_BASE_URL": "https://api.wikitree.com/api.php"
-  }
+  "regions": ["iad1"]
 }
