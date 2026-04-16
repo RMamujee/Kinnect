@@ -13,12 +13,14 @@ import { AutoBuildBanner } from '@/components/FamilyTree/AutoBuildBanner';
 import { AutoTreeBuilder } from '@/components/FamilyTree/AutoTreeBuilder';
 import { cn, getPreferredName, formatLifespan } from '@/lib/utils';
 import { seedDemoData } from '@/lib/seedData';
+import { AddPersonModal } from '@/components/UI/AddPersonModal';
 
 export default function TreePage() {
   const router = useRouter();
   const hydrated = useHydration();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchRecordsPersonId, setSearchRecordsPersonId] = useState<string | null>(null);
+  const [showAddPerson, setShowAddPerson] = useState(false);
 
   const {
     persons,
@@ -100,7 +102,7 @@ export default function TreePage() {
 
         <button
           className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-3 py-1.5 transition-colors"
-          onClick={() => router.push('/onboarding')}
+          onClick={() => setShowAddPerson(true)}
         >
           <Plus className="w-3.5 h-3.5" />
           Add Person
@@ -183,6 +185,9 @@ export default function TreePage() {
 
       {/* Auto-build overlay — fires once after onboarding to search & build tree */}
       <AutoTreeBuilder />
+
+      {/* Add Person modal */}
+      {showAddPerson && <AddPersonModal onClose={() => setShowAddPerson(false)} />}
     </div>
   );
 }

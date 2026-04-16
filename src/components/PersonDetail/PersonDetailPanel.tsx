@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Edit3, ExternalLink, Calendar, MapPin, User2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, Edit3, ExternalLink, Calendar, MapPin, User2, Camera, Trash2 } from 'lucide-react';
 import type { Person } from '@/lib/types';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { getPreferredName, formatLifespan, formatPartialDate, confidenceColor, confidenceLabel, cn } from '@/lib/utils';
@@ -25,6 +25,8 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
     citations: s.citations,
   }));
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!person) return null;
 
   const name = getPreferredName(person);
@@ -32,25 +34,80 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
 
   const personCitations = Object.values(citations).filter(c => c.personId === personId);
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    resizeImage(file, 400).then(dataUrl => {
+      updatePerson(personId, { profileImageUrl: dataUrl });
+    });
+    // Reset so same file can be re-selected
+    e.target.value = '';
+  }
+
+  const avatarBg =
+    person.gender === 'male' ? 'bg-blue-200'
+    : person.gender === 'female' ? 'bg-pink-200'
+    : 'bg-gray-200';
+
   return (
     <div className="w-96 h-full bg-white border-l border-gray-200 flex flex-col shadow-xl animate-slide-up">
       {/* Header */}
       <div className={cn(
-        'flex items-start justify-between p-4 border-b border-gray-100',
+        'p-4 border-b border-gray-100',
         person.gender === 'male' ? 'bg-blue-50' : person.gender === 'female' ? 'bg-pink-50' : 'bg-gray-50'
       )}>
-        <div>
-          <h3 className="font-serif font-bold text-lg text-gray-900">{name}</h3>
-          <p className="text-sm text-gray-500">{lifespan}</p>
-          {person.birthPlace && (
-            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-              <MapPin className="w-3 h-3" />{person.birthPlace}
-            </p>
-          )}
+        <div className="flex items-start gap-3">
+          {/* Clickable photo avatar */}
+          <div className="relative flex-shrink-0 group">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow block"
+              title="Upload photo"
+            >
+              {person.profileImageUrl ? (
+                <img src={person.profileImageUrl} alt={name} className="w-full h-full object-cover" />
+              ) : (
+                <div className={cn('w-full h-full flex items-center justify-center', avatarBg)}>
+                  <User2 className="w-6 h-6 text-gray-500" />
+                </div>
+              )}
+              <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <Camera className="w-4 h-4 text-white" />
+              </div>
+            </button>
+            {person.profileImageUrl && (
+              <button
+                onClick={() => updatePerson(personId, { profileImageUrl: undefined })}
+                className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                title="Remove photo"
+              >
+                <Trash2 className="w-2.5 h-2.5 text-white" />
+              </button>
+            )}
+          </div>
+
+          {/* Name + lifespan */}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-serif font-bold text-lg text-gray-900 truncate">{name}</h3>
+            <p className="text-sm text-gray-500">{lifespan}</p>
+            {person.birthPlace && (
+              <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                <MapPin className="w-3 h-3" />{person.birthPlace}
+              </p>
+            )}
+          </div>
+
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
-          <X className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Tabs */}
@@ -208,4 +265,30 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <div className="space-y-1">{children}</div>
     </div>
   );
+}
+
+/** Resize an image file to at most maxSize×maxSize and return a JPEG data URL. */
+function resizeImage(file: File, maxSize: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > height) {
+        if (width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; }
+      } else {
+        if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('canvas unavailable')); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = reject;
+    img.src = objectUrl;
+  });
 }
