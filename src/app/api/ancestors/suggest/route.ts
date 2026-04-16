@@ -1,16 +1,11 @@
 /**
  * POST /api/ancestors/suggest
  *
- * Given a person and which relations are missing, searches across all available
- * sources for likely ancestors/kin. Returns ranked suggestions per relation.
- *
- * Body: {
- *   person: { givenName, surname, birthYear, birthPlace, gender },
- *   missingRelations: ('father'|'mother'|'spouse'|'sibling'|'child')[],
- *   accessToken?: string   // FamilySearch OAuth token (optional)
- * }
+ * Streams ranked suggestions per missing relation via SSE.
+ * Each SSE event: { relation, estimatedBirthYear, estimatedBirthRange, suggestions[] }
+ * Final event:   { done: true }
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { searchWikiTree }           from '@/lib/wikitree';
 import { searchFamilySearch }       from '@/lib/familysearch';
@@ -20,6 +15,8 @@ import { searchDPLA }               from '@/lib/dpla';
 import { searchWikidata }           from '@/lib/wikidata';
 import { searchInternetArchive }    from '@/lib/internetarchive';
 import type { RecordSearchQuery, RecordSearchResult } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   person: z.object({
@@ -36,7 +33,6 @@ const bodySchema = z.object({
   accessToken: z.string().optional(),
 });
 
-/** Estimate expected birth year for an ancestor relative. */
 function estimatedBirthYear(
   personBirthYear: number,
   relation: string,
@@ -60,105 +56,100 @@ function estimatedBirthYear(
 
 export async function POST(request: NextRequest) {
   let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  try { body = await request.json(); } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
+    return new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400 });
   }
 
   const { person, missingRelations, accessToken } = parsed.data;
+  const encoder = new TextEncoder();
 
-  // Build a query for each missing relation and search in parallel
-  const relationJobs = missingRelations.map(async relation => {
-    const yearRange = person.birthYear
-      ? estimatedBirthYear(person.birthYear, relation)
-      : null;
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(payload: object) {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        } catch {}
+      }
 
-    // For parent/grandparent searches, use the person's surname as a starting point.
-    // For spouse, search both surnames. For child, use person as parent.
-    const baseQuery: RecordSearchQuery = {
-      surname: person.surname,
-      birthYear: yearRange?.estimate,
-      birthYearRange: yearRange ? (yearRange.max - yearRange.min) / 2 : 10,
-      birthPlace: person.birthPlace,
-    };
+      // Run all relations in parallel; emit each as soon as it resolves
+      const jobs = missingRelations.map(async relation => {
+        const yearRange = person.birthYear
+          ? estimatedBirthYear(person.birthYear, relation)
+          : null;
 
-    // Customise the query by relation type
-    if (relation === 'father') {
-      baseQuery.fatherName = undefined;
-      baseQuery.motherName = undefined;
-    } else if (relation === 'mother') {
-      // Mothers may have maiden names; surname search less reliable
-      baseQuery.surname = undefined; // widen search
-      baseQuery.givenName = undefined;
-      baseQuery.birthYear = yearRange?.estimate;
-      baseQuery.spouseName = [person.givenName, person.surname].filter(Boolean).join(' ') || undefined;
-    } else if (relation === 'child') {
-      baseQuery.fatherName = person.gender === 'male'
-        ? [person.givenName, person.surname].filter(Boolean).join(' ')
-        : undefined;
-      baseQuery.motherName = person.gender === 'female'
-        ? [person.givenName, person.surname].filter(Boolean).join(' ')
-        : undefined;
-    } else if (relation === 'spouse') {
-      baseQuery.spouseName = [person.givenName, person.surname].filter(Boolean).join(' ');
-      baseQuery.surname = undefined; // spouse may have different surname
-    }
+        const baseQuery: RecordSearchQuery = {
+          surname:        person.surname,
+          birthYear:      yearRange?.estimate,
+          birthYearRange: yearRange ? (yearRange.max - yearRange.min) / 2 : 10,
+          birthPlace:     person.birthPlace,
+        };
 
-    // Run searches across all suitable sources in parallel
-    const [
-      wikitreeResults,
-      familysearchResults,
-      chroniclingResults,
-      naraResults,
-      dplaResults,
-      wikidataResults,
-      archiveResults,
-    ] = await Promise.allSettled([
-      searchWikiTree(baseQuery),
-      accessToken ? searchFamilySearch(baseQuery, accessToken) : Promise.resolve([]),
-      searchChroniclingAmerica(baseQuery),
-      searchNARA(baseQuery),
-      searchDPLA(baseQuery),
-      searchWikidata(baseQuery),
-      searchInternetArchive(baseQuery),
-    ]);
+        if (relation === 'mother') {
+          baseQuery.surname    = undefined;
+          baseQuery.givenName  = undefined;
+          baseQuery.spouseName = [person.givenName, person.surname].filter(Boolean).join(' ') || undefined;
+        } else if (relation === 'child') {
+          baseQuery.fatherName = person.gender === 'male'
+            ? [person.givenName, person.surname].filter(Boolean).join(' ') : undefined;
+          baseQuery.motherName = person.gender === 'female'
+            ? [person.givenName, person.surname].filter(Boolean).join(' ') : undefined;
+        } else if (relation === 'spouse') {
+          baseQuery.spouseName = [person.givenName, person.surname].filter(Boolean).join(' ');
+          baseQuery.surname    = undefined;
+        }
 
-    const results: RecordSearchResult[] = [];
-    [wikitreeResults, familysearchResults, chroniclingResults, naraResults,
-     dplaResults, wikidataResults, archiveResults].forEach(r => {
-      if (r.status === 'fulfilled') results.push(...r.value);
-    });
+        const [wt, fs, ca, nara, dpla, wd, ia] = await Promise.allSettled([
+          searchWikiTree(baseQuery),
+          accessToken ? searchFamilySearch(baseQuery, accessToken) : Promise.resolve([]),
+          searchChroniclingAmerica(baseQuery),
+          searchNARA(baseQuery),
+          searchDPLA(baseQuery),
+          searchWikidata(baseQuery),
+          searchInternetArchive(baseQuery),
+        ]);
 
-    // Sort by confidence and deduplicate by URL
-    const seen = new Set<string>();
-    const deduped = results
-      .sort((a, b) => b.confidence - a.confidence)
-      .filter(r => {
-        const key = r.url ?? r.externalId;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 10); // top 10 per relation
+        const results: RecordSearchResult[] = [];
+        [wt, fs, ca, nara, dpla, wd, ia].forEach(r => {
+          if (r.status === 'fulfilled') results.push(...r.value);
+        });
 
-    return {
-      relation,
-      estimatedBirthYear: yearRange?.estimate,
-      estimatedBirthRange: yearRange ? `${yearRange.min}–${yearRange.max}` : null,
-      suggestions: deduped,
-    };
+        const seen = new Set<string>();
+        const deduped = results
+          .sort((a, b) => b.confidence - a.confidence)
+          .filter(r => {
+            const key = r.url ?? r.externalId;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 10);
+
+        // Emit this relation's results immediately
+        send({
+          relation,
+          estimatedBirthYear:  yearRange?.estimate,
+          estimatedBirthRange: yearRange ? `${yearRange.min}–${yearRange.max}` : null,
+          suggestions:         deduped,
+        });
+      });
+
+      await Promise.all(jobs);
+      send({ done: true });
+      controller.close();
+    },
   });
 
-  const settled = await Promise.allSettled(relationJobs);
-  const suggestions = settled
-    .filter(r => r.status === 'fulfilled')
-    .map(r => (r as PromiseFulfilledResult<typeof relationJobs extends Array<Promise<infer T>> ? T : never>).value);
-
-  return NextResponse.json({ suggestions });
+  return new Response(stream, {
+    headers: {
+      'Content-Type':  'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection':    'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
