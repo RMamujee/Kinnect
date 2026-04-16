@@ -26,7 +26,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-ancestry-cream via-white to-primary-50">
       {/* Hero */}
-      <div className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
+      <div className="max-w-5xl mx-auto px-6 pt-10 md:pt-20 pb-16 text-center">
         <div className="flex items-center justify-center mb-6">
           <Image src="/logo.png" alt="Kinnect" width={200} height={200} priority className="rounded-3xl" />
         </div>

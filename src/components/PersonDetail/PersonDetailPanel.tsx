@@ -51,7 +51,11 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
     : 'bg-gray-200';
 
   return (
-    <div className="w-96 h-full bg-white border-l border-gray-200 flex flex-col shadow-xl animate-slide-up">
+    <div className="fixed inset-x-0 bottom-0 h-[85vh] z-40 sm:relative sm:h-full sm:inset-auto sm:w-96 bg-white rounded-t-2xl sm:rounded-none border-t sm:border-t-0 sm:border-l border-gray-200 flex flex-col shadow-xl animate-slide-up">
+      {/* Mobile drag handle */}
+      <div className="sm:hidden flex justify-center pt-2 pb-1 flex-shrink-0">
+        <div className="w-10 h-1 bg-gray-300 rounded-full" />
+      </div>
       {/* Header */}
       <div className={cn(
         'p-4 border-b border-gray-100',
