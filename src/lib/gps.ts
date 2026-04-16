@@ -118,6 +118,37 @@ function computeOverallConfidence(
   return 'possible';
 }
 
+const CREDIBLE_SOURCES = new Set([
+  'WikiTree', 'FamilySearch', 'Ancestry', 'FindMyPast', 'MyHeritage',
+  'NARA', 'Findmypast', 'Fold3', 'DPLA', 'LOC',
+]);
+
+export interface GPSGateResult {
+  approved: boolean;
+  reason?: string;
+}
+
+/**
+ * Internal gate applied before any person is automatically added to the tree.
+ * Enforces minimum GPS-standard evidence requirements without exposing the
+ * framework to the user.
+ */
+export function checkGPSGate(candidate: Person): GPSGateResult {
+  // Must originate from at least one credible genealogical source
+  const hasCredibleSource = candidate.gpsStatus.sourcesSearched.some(s => CREDIBLE_SOURCES.has(s));
+  if (!hasCredibleSource) {
+    return { approved: false, reason: 'No credible genealogical source recorded' };
+  }
+
+  // Must have an identifiable name
+  const preferredName = candidate.names.find(n => n.isPreferred) ?? candidate.names[0];
+  if (!preferredName || (!preferredName.given.trim() && !preferredName.surname.trim())) {
+    return { approved: false, reason: 'No identifiable name' };
+  }
+
+  return { approved: true };
+}
+
 export function buildCitationString(source: Source, citation: Citation): string {
   // Mills' Evidence Explained citation format (abbreviated)
   const parts: string[] = [];

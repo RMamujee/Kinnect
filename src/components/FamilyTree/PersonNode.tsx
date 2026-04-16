@@ -5,7 +5,6 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { User, Search, AlertCircle, CheckCircle2, Shield } from 'lucide-react';
 import type { Person } from '@/lib/types';
 import { getPreferredName, formatLifespan, cn } from '@/lib/utils';
-import { gpsScore } from '@/lib/utils';
 
 export interface PersonNodeData {
   person: Person;
@@ -19,7 +18,7 @@ function PersonNodeComponent({ data }: NodeProps<PersonNodeData>) {
   const { person, isRoot, isSelected, onSelect, onSearchRecords } = data;
   const name = getPreferredName(person);
   const lifespan = formatLifespan(person.birthYear, person.deathYear, person.isLiving);
-  const score = gpsScore(person.gpsStatus);
+  const confidence = person.gpsStatus.overallConfidence;
 
   const genderColor =
     person.gender === 'male'
@@ -29,9 +28,10 @@ function PersonNodeComponent({ data }: NodeProps<PersonNodeData>) {
       : 'border-gray-300 bg-gray-50';
 
   const confidenceBadge =
-    score >= 80 ? { icon: <CheckCircle2 className="w-3 h-3" />, color: 'text-green-500' } :
-    score >= 40 ? { icon: <Shield className="w-3 h-3" />, color: 'text-yellow-500' } :
-    { icon: <AlertCircle className="w-3 h-3" />, color: 'text-gray-400' };
+    confidence === 'proven' ? { icon: <CheckCircle2 className="w-3 h-3" />, color: 'text-green-500', label: 'Verified' } :
+    confidence === 'probable' ? { icon: <Shield className="w-3 h-3" />, color: 'text-blue-400', label: 'Sourced' } :
+    confidence === 'possible' ? { icon: <Shield className="w-3 h-3" />, color: 'text-yellow-500', label: 'Partial' } :
+    { icon: <AlertCircle className="w-3 h-3" />, color: 'text-gray-400', label: 'Unverified' };
 
   return (
     <>
@@ -73,7 +73,7 @@ function PersonNodeComponent({ data }: NodeProps<PersonNodeData>) {
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-black/5">
           <div className={cn('flex items-center gap-1', confidenceBadge.color)}>
             {confidenceBadge.icon}
-            <span className="text-xs font-medium">{score}%</span>
+            <span className="text-xs font-medium">{confidenceBadge.label}</span>
           </div>
 
           {isRoot && (
