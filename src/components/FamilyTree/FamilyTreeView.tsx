@@ -36,11 +36,19 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  // Track which node IDs exist so we know when structure changes (added/removed persons)
+  // Track structural changes: person keys + image presence + family membership
   const structureKey = useMemo(() => {
     const pKeys = Object.keys(persons).sort().join(',');
-    const fKeys = Object.keys(families).sort().join(',');
-    return `${pKeys}|${fKeys}`;
+    const pImages = Object.values(persons)
+      .filter(p => p.profileImageUrl)
+      .map(p => p.id)
+      .sort()
+      .join(',');
+    const fData = Object.values(families)
+      .map(f => `${f.id}:${f.spouse1Id ?? ''}:${f.spouse2Id ?? ''}:${f.childIds.join(':')}`)
+      .sort()
+      .join('|');
+    return `${pKeys}|${pImages}|${fData}`;
   }, [persons, families]);
 
   // Rebuild layout when tree structure changes; preserve drag positions for existing nodes
@@ -115,6 +123,8 @@ function FamilyTreeInner({ onSearchRecords }: { onSearchRecords: (personId: stri
     >
       <Background color="#e2e8f0" gap={20} size={1} />
       <MiniMap
+        pannable
+        zoomable
         nodeColor={node => {
           const gender = (node.data as { person: { gender: string } })?.person?.gender;
           return gender === 'male' ? '#bfdbfe' : gender === 'female' ? '#fbcfe8' : '#e2e8f0';
