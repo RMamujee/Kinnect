@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { X, Edit3, ExternalLink, Calendar, MapPin, User2, Camera, Trash2, Pencil, Check } from 'lucide-react';
+import { X, ExternalLink, Calendar, MapPin, User2, Camera, Trash2, Pencil, Check } from 'lucide-react';
 import type { Person, Fact, Gender } from '@/lib/types';
 import { useGenealogyStore } from '@/store/genealogyStore';
 import { getPreferredName, formatLifespan, formatPartialDate, confidenceColor, confidenceLabel, cn } from '@/lib/utils';
@@ -19,6 +19,10 @@ interface Props {
 export function PersonDetailPanel({ personId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('details');
 
+  // Edit mode lives here (not inside DetailsTab) so store re-renders can't reset it
+  const [editing, setEditing] = useState(false);
+  const [nameForm, setNameForm] = useState({ given: '', surname: '', maiden: '', gender: 'unknown' as Gender });
+
   const { person, updatePerson, deletePerson, addFact, updateFact, deleteFact, sources, citations, commentCount } = useGenealogyStore(s => ({
     person: s.persons[personId],
     updatePerson: s.updatePerson,
@@ -35,18 +39,41 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
 
   if (!person) return null;
 
-  const name = getPreferredName(person);
+  const displayName = getPreferredName(person);
   const lifespan = formatLifespan(person.birthYear, person.deathYear, person.isLiving);
-
   const personCitations = Object.values(citations).filter(c => c.personId === personId);
+
+  function startEditing() {
+    const pname = person.names.find(n => n.isPreferred) ?? person.names[0];
+    setNameForm({
+      given:   pname?.given        ?? '',
+      surname: pname?.surname      ?? '',
+      maiden:  pname?.maidenName   ?? '',
+      gender:  person.gender,
+    });
+    setEditing(true);
+  }
+
+  function saveEdits() {
+    updatePerson(personId, {
+      names: person.names.map(n =>
+        n.isPreferred
+          ? { ...n, given: nameForm.given.trim(), surname: nameForm.surname.trim(), maidenName: nameForm.maiden.trim() || undefined }
+          : n
+      ),
+      gender: nameForm.gender,
+    });
+    setEditing(false);
+  }
+
+  function cancelEditing() {
+    setEditing(false);
+  }
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    resizeImage(file, 400).then(dataUrl => {
-      updatePerson(personId, { profileImageUrl: dataUrl });
-    });
-    // Reset so same file can be re-selected
+    resizeImage(file, 400).then(dataUrl => updatePerson(personId, { profileImageUrl: dataUrl }));
     e.target.value = '';
   }
 
@@ -61,81 +88,88 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
       <div className="sm:hidden flex justify-center pt-2 pb-1 flex-shrink-0">
         <div className="w-10 h-1 bg-gray-300 rounded-full" />
       </div>
+
       {/* Header */}
       <div className={cn(
-        'p-4 border-b border-gray-100',
+        'p-4 border-b border-gray-100 flex-shrink-0',
         person.gender === 'male' ? 'bg-blue-50' : person.gender === 'female' ? 'bg-pink-50' : 'bg-gray-50'
       )}>
         <div className="flex items-start gap-3">
-          {/* Clickable photo avatar */}
+          {/* Photo */}
           <div className="relative flex-shrink-0 group">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white shadow-md block"
-              title="Upload photo"
-            >
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+            <button onClick={() => fileInputRef.current?.click()}
+              className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-white shadow-md block" title="Upload photo">
               {person.profileImageUrl ? (
-                <img src={person.profileImageUrl} alt={name} className="w-full h-full object-cover" />
+                <img src={person.profileImageUrl} alt={displayName} className="w-full h-full object-cover" />
               ) : (
                 <div className={cn('w-full h-full flex items-center justify-center', avatarBg)}>
-                  <User2 className="w-8 h-8 text-gray-500" />
+                  <User2 className="w-7 h-7 text-gray-500" />
                 </div>
               )}
               <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                <Camera className="w-5 h-5 text-white" />
+                <Camera className="w-4 h-4 text-white" />
               </div>
             </button>
             {person.profileImageUrl && (
-              <button
-                onClick={() => updatePerson(personId, { profileImageUrl: undefined })}
-                className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                title="Remove photo"
-              >
-                <Trash2 className="w-2.5 h-2.5 text-white" />
+              <button onClick={() => updatePerson(personId, { profileImageUrl: undefined })}
+                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                title="Remove photo">
+                <Trash2 className="w-2 h-2 text-white" />
               </button>
             )}
           </div>
 
           {/* Name + lifespan */}
           <div className="flex-1 min-w-0">
-            <h3 className="font-serif font-bold text-lg text-gray-900 truncate">{name}</h3>
-            <p className="text-sm text-gray-500">{lifespan}</p>
+            <h3 className="font-serif font-bold text-base text-gray-900 truncate">{displayName}</h3>
+            <p className="text-xs text-gray-500">{lifespan}</p>
             {person.birthPlace && (
-              <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                <MapPin className="w-3 h-3" />{person.birthPlace}
+              <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1 truncate">
+                <MapPin className="w-3 h-3 flex-shrink-0" />{person.birthPlace}
               </p>
             )}
           </div>
 
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 flex-shrink-0">
-            <X className="w-4 h-4" />
-          </button>
+          {/* Edit / Save / Cancel — only visible on Details tab */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {tab === 'details' && (
+              editing ? (
+                <>
+                  <button onClick={saveEdits}
+                    className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors">
+                    <Check className="w-3 h-3" /> Save
+                  </button>
+                  <button onClick={cancelEditing}
+                    className="text-xs font-semibold px-2.5 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors">
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button onClick={startEditing}
+                  className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg transition-colors">
+                  <Pencil className="w-3 h-3" /> Edit
+                </button>
+              )
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
+      <div className="flex border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
         {(['details', 'records', 'comments'] as Tab[]).map(t => {
           const label = t === 'comments' ? 'Notes' : t;
           const count = t === 'comments' ? commentCount : 0;
           return (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
+            <button key={t} onClick={() => { setTab(t); if (t !== 'details') setEditing(false); }}
               className={cn(
                 'flex-1 min-w-0 py-2.5 text-xs font-semibold capitalize whitespace-nowrap transition-colors px-1',
-                tab === t
-                  ? 'border-b-2 border-primary-600 text-primary-700'
-                  : 'text-gray-500 hover:text-gray-700'
-              )}
-            >
+                tab === t ? 'border-b-2 border-primary-600 text-primary-700' : 'text-gray-500 hover:text-gray-700'
+              )}>
               {label}
               {t === 'comments' && count > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">
@@ -148,121 +182,104 @@ export function PersonDetailPanel({ personId, onClose }: Props) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {tab === 'details' && (
           <DetailsTab
             person={person}
             citations={personCitations}
             sources={sources}
+            editing={editing}
+            nameForm={nameForm}
+            setNameForm={setNameForm}
             onAddFact={fact => addFact(personId, fact)}
             onUpdateFact={(factId, data) => updateFact(personId, factId, data)}
             onDeleteFact={factId => deleteFact(personId, factId)}
-            onUpdatePerson={data => updatePerson(personId, data)}
           />
         )}
-        {tab === 'records' && (
-          <RecordSearch person={person} />
-        )}
-        {tab === 'comments' && (
-          <CommentsTab personId={personId} />
-        )}
+        {tab === 'records' && <RecordSearch person={person} />}
+        {tab === 'comments' && <CommentsTab personId={personId} />}
       </div>
 
       {/* Delete */}
-      <div className="px-4 pb-4 pt-2 border-t border-gray-100">
+      <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex-shrink-0">
         <button
           onClick={() => {
-            if (confirm(`Delete ${name}? This cannot be undone.`)) {
+            if (confirm(`Delete ${displayName}? This cannot be undone.`)) {
               deletePerson(personId);
               onClose();
             }
           }}
           className="w-full py-2 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
         >
-          <Trash2 className="w-4 h-4" />
-          Delete Person
+          <Trash2 className="w-4 h-4" /> Delete Person
         </button>
       </div>
     </div>
   );
 }
 
-function DetailsTab({
-  person, citations, sources,
-  onAddFact, onUpdateFact, onDeleteFact, onUpdatePerson,
-}: {
+// ── Details Tab ────────────────────────────────────────────────────────────────
+
+interface DetailsTabProps {
   person: Person;
   citations: import('@/lib/types').Citation[];
   sources: Record<string, import('@/lib/types').Source>;
+  editing: boolean;
+  nameForm: { given: string; surname: string; maiden: string; gender: Gender };
+  setNameForm: React.Dispatch<React.SetStateAction<{ given: string; surname: string; maiden: string; gender: Gender }>>;
   onAddFact: (fact: Omit<Fact, 'id' | 'personId' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateFact: (factId: string, data: Partial<Fact>) => void;
   onDeleteFact: (factId: string) => void;
-  onUpdatePerson: (data: Partial<Person>) => void;
-}) {
-  const [editing, setEditing] = useState(false);
+}
 
-  // Name / identity edit state
-  const preferredName = person.names.find(n => n.isPreferred) ?? person.names[0];
-  const [nameForm, setNameForm] = useState({ given: '', surname: '', maiden: '', gender: 'unknown' as Gender });
-
-  function enterEdit() {
-    setNameForm({
-      given:   preferredName?.given    ?? '',
-      surname: preferredName?.surname  ?? '',
-      maiden:  preferredName?.maidenName ?? '',
-      gender:  person.gender,
-    });
-    setEditing(true);
-  }
-
-  function saveAndExit() {
-    onUpdatePerson({
-      names: person.names.map(n =>
-        n.isPreferred
-          ? { ...n, given: nameForm.given.trim(), surname: nameForm.surname.trim(), maidenName: nameForm.maiden.trim() || undefined }
-          : n
-      ),
-      gender: nameForm.gender,
-    });
-    setEditing(false);
-  }
-
-  const setNF = (k: keyof typeof nameForm, v: string) => setNameForm(s => ({ ...s, [k]: v }));
+function DetailsTab({ person, citations, sources, editing, nameForm, setNameForm, onAddFact, onUpdateFact, onDeleteFact }: DetailsTabProps) {
+  const set = (k: keyof typeof nameForm, v: string) => setNameForm(s => ({ ...s, [k]: v }));
 
   if (editing) {
     return (
-      <div className="space-y-4">
-        {/* ── Name & Identity (edit) ── */}
+      <div className="space-y-5">
+        {/* ── Name & Identity ── */}
         <Section title="Name & Identity">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-gray-500 mb-0.5 block">Given Name</label>
-                <input value={nameForm.given} onChange={e => setNF('given', e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+                <label className="block text-xs font-medium text-gray-600 mb-1">Given Name</label>
+                <input
+                  value={nameForm.given}
+                  onChange={e => set('given', e.target.value)}
+                  placeholder="First / given name"
+                  className="w-full text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+                />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-0.5 block">Surname</label>
-                <input value={nameForm.surname} onChange={e => setNF('surname', e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+                <label className="block text-xs font-medium text-gray-600 mb-1">Surname</label>
+                <input
+                  value={nameForm.surname}
+                  onChange={e => set('surname', e.target.value)}
+                  placeholder="Last name"
+                  className="w-full text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+                />
               </div>
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-0.5 block">Maiden / Birth Surname (optional)</label>
-              <input value={nameForm.maiden} onChange={e => setNF('maiden', e.target.value)}
-                placeholder="If different from current surname"
-                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+              <label className="block text-xs font-medium text-gray-600 mb-1">Maiden / Birth Surname</label>
+              <input
+                value={nameForm.maiden}
+                onChange={e => set('maiden', e.target.value)}
+                placeholder="Birth surname, if different from current"
+                className="w-full text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+              />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Gender</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Gender</label>
               <div className="flex gap-2">
                 {(['male', 'female', 'unknown'] as Gender[]).map(g => (
-                  <button key={g} type="button" onClick={() => setNF('gender', g)}
+                  <button key={g} type="button" onClick={() => set('gender', g)}
                     className={cn(
-                      'flex-1 py-1.5 text-xs font-semibold rounded-lg border capitalize transition-colors',
+                      'flex-1 py-2 text-xs font-semibold rounded-lg border capitalize transition-colors',
                       nameForm.gender === g
                         ? 'bg-primary-600 text-white border-primary-600'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                     )}>
                     {g}
                   </button>
@@ -272,7 +289,7 @@ function DetailsTab({
           </div>
         </Section>
 
-        {/* ── Life Events (edit) ── */}
+        {/* ── Life Events ── */}
         <Section title="Life Events">
           <EditFacts
             facts={person.facts}
@@ -281,18 +298,6 @@ function DetailsTab({
             onDelete={onDeleteFact}
           />
         </Section>
-
-        {/* Save / Cancel */}
-        <div className="flex gap-2 pt-1">
-          <button type="button" onClick={saveAndExit}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors">
-            <Check className="w-4 h-4" /> Save Changes
-          </button>
-          <button type="button" onClick={() => setEditing(false)}
-            className="flex-1 py-2 text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors">
-            Cancel
-          </button>
-        </div>
       </div>
     );
   }
@@ -300,15 +305,7 @@ function DetailsTab({
   // ── View mode ──────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {/* Edit button */}
-      <div className="flex justify-end">
-        <button type="button" onClick={enterEdit}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-          <Pencil className="w-3 h-3" /> Edit Profile
-        </button>
-      </div>
-
-      {/* Names */}
+      {/* Name & Identity */}
       <Section title="Name & Identity">
         {person.names.map(name => (
           <div key={name.id} className="flex items-center gap-2 text-sm flex-wrap">
@@ -318,17 +315,17 @@ function DetailsTab({
             <span className="text-xs text-gray-400 capitalize">{name.type}</span>
           </div>
         ))}
-        <div className="text-xs text-gray-400 capitalize mt-1">{person.gender}</div>
+        <div className="text-xs text-gray-400 capitalize mt-0.5">{person.gender}</div>
       </Section>
 
-      {/* Facts */}
+      {/* Life Events */}
       {person.facts.length > 0 && (
         <Section title="Life Events">
           <div className="space-y-2">
             {person.facts.map(fact => (
               <div key={fact.id} className="flex items-start gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-semibold capitalize text-gray-700">{fact.type.replace('_', ' ')}</span>
                     <span className={cn('text-xs px-1.5 py-0.5 rounded-full border', confidenceColor(fact.confidence))}>
                       {confidenceLabel(fact.confidence)}
@@ -336,13 +333,13 @@ function DetailsTab({
                   </div>
                   {fact.date && (
                     <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-                      <Calendar className="w-3 h-3" />
+                      <Calendar className="w-3 h-3 flex-shrink-0" />
                       {formatPartialDate(fact.date)}
                     </div>
                   )}
                   {fact.place && (
                     <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500">
-                      <MapPin className="w-3 h-3" />
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
                       {fact.place.fullText ?? [fact.place.city, fact.place.state, fact.place.country].filter(Boolean).join(', ')}
                     </div>
                   )}
@@ -357,6 +354,14 @@ function DetailsTab({
             ))}
           </div>
         </Section>
+      )}
+
+      {/* Empty facts state */}
+      {person.facts.length === 0 && (
+        <div className="text-center py-6 text-gray-400">
+          <p className="text-sm">No life events recorded.</p>
+          <p className="text-xs mt-1">Click <strong>Edit</strong> above to add birth, death, and other events.</p>
+        </div>
       )}
 
       {/* External IDs */}
@@ -413,7 +418,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** Resize an image file to at most maxSize×maxSize and return a JPEG data URL. */
 function resizeImage(file: File, maxSize: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();

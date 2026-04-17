@@ -138,17 +138,17 @@ function FactForm({
   const set = (k: keyof FactFormState, v: string) => setS(prev => ({ ...prev, [k]: v }));
   const showValue = VALUE_TYPES.has(factType);
 
+  const inputCls = 'w-full text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200';
+  const selectCls = 'text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200';
+  const labelCls = 'block text-xs font-medium text-gray-600 mb-1';
+
   return (
-    <div className="space-y-3 pt-1">
+    <div className="space-y-4 pt-1">
       {/* Date */}
       <div>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</span>
-        <div className="flex flex-wrap gap-2 mt-1">
-          <select
-            value={s.qualifier}
-            onChange={e => set('qualifier', e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
-          >
+        <span className={labelCls}>Date</span>
+        <div className="flex flex-wrap gap-2">
+          <select value={s.qualifier} onChange={e => set('qualifier', e.target.value)} className={selectCls}>
             <option value="">Exact</option>
             <option value="about">About</option>
             <option value="before">Before</option>
@@ -158,52 +158,45 @@ function FactForm({
             <option value="calculated">Calculated</option>
           </select>
           <input type="number" placeholder="Year" value={s.year} onChange={e => set('year', e.target.value)}
-            className="w-20 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+            className="w-24 text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200" />
           <input type="number" placeholder="Mo" min={1} max={12} value={s.month} onChange={e => set('month', e.target.value)}
-            className="w-14 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+            className="w-16 text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200" />
           <input type="number" placeholder="Day" min={1} max={31} value={s.day} onChange={e => set('day', e.target.value)}
-            className="w-14 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+            className="w-16 text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200" />
         </div>
       </div>
 
       {/* Value (occupation, religion, etc.) */}
       {showValue && (
         <div>
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            {VALUE_LABEL[factType] ?? 'Details'}
-          </span>
+          <label className={labelCls}>{VALUE_LABEL[factType] ?? 'Details'}</label>
           <input type="text" value={s.value} onChange={e => set('value', e.target.value)}
-            placeholder="Enter details…"
-            className="mt-1 w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+            placeholder="Enter details…" className={inputCls} />
         </div>
       )}
 
       {/* Place */}
       <div>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Location</span>
-        <div className="grid grid-cols-2 gap-2 mt-1">
-          <input type="text" placeholder="City / Town" value={s.city} onChange={e => set('city', e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
-          <input type="text" placeholder="County" value={s.county} onChange={e => set('county', e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
-          <input type="text" placeholder="State / Province" value={s.state} onChange={e => set('state', e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
-          <input type="text" placeholder="Country" value={s.country} onChange={e => set('country', e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+        <label className={labelCls}>Location</label>
+        <div className="grid grid-cols-2 gap-2">
+          <input type="text" placeholder="City / Town" value={s.city} onChange={e => set('city', e.target.value)} className={inputCls} />
+          <input type="text" placeholder="County" value={s.county} onChange={e => set('county', e.target.value)} className={inputCls} />
+          <input type="text" placeholder="State / Province" value={s.state} onChange={e => set('state', e.target.value)} className={inputCls} />
+          <input type="text" placeholder="Country" value={s.country} onChange={e => set('country', e.target.value)} className={inputCls} />
         </div>
       </div>
 
       {/* Confidence */}
       <div>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Confidence</span>
-        <div className="flex gap-2 mt-1 flex-wrap">
+        <label className={labelCls}>Confidence</label>
+        <div className="flex gap-2 flex-wrap">
           {(['unverified', 'possible', 'probable', 'proven'] as ConfidenceLevel[]).map(lvl => (
             <button key={lvl} type="button" onClick={() => set('confidence', lvl)}
               className={cn(
-                'text-xs px-2.5 py-1 rounded-full border transition-colors capitalize',
+                'text-xs px-3 py-1.5 rounded-full border font-semibold capitalize transition-colors',
                 s.confidence === lvl
                   ? 'bg-primary-600 text-white border-primary-600'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               )}>
               {lvl}
             </button>
@@ -213,20 +206,20 @@ function FactForm({
 
       {/* Notes */}
       <div>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</span>
+        <label className={labelCls}>Notes</label>
         <textarea value={s.notes} onChange={e => set('notes', e.target.value)} rows={2}
           placeholder="Context, source references, caveats…"
-          className="mt-1 w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary-400" />
+          className="w-full text-sm bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 resize-none focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200" />
       </div>
 
       {/* Actions */}
       <div className="flex gap-2">
         <button type="button" onClick={() => onSave(formToFactData(s))}
-          className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-semibold bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors">
-          <Check className="w-3 h-3" /> Save
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors">
+          <Check className="w-3.5 h-3.5" /> Save Event
         </button>
         <button type="button" onClick={onCancel}
-          className="flex-1 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
+          className="flex-1 py-2 text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
           Cancel
         </button>
       </div>
